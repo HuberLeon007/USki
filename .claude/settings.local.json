@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(npm search *)",
+      "Bash(npm show *)",
+      "Bash(uv --version)",
+      "Bash(pipx --version)",
+      "Bash(uv tool *)",
+      "Bash(specify integration *)",
+      "Bash(specify *)"
+    ]
+  }
+}
