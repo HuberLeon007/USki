@@ -13,7 +13,9 @@
       "Bash(git commit *)",
       "Bash(.specify/extensions/git/scripts/bash/initialize-repo.sh *)",
       "Bash(.specify/extensions/git/scripts/bash/create-new-feature.sh *)",
-      "Bash(.specify/extensions/git/scripts/bash/auto-commit.sh after_specify *)"
+      "Bash(.specify/extensions/git/scripts/bash/auto-commit.sh after_specify *)",
+      "Bash(powershell *)",
+      "Bash(.specify/extensions/git/scripts/bash/auto-commit.sh after_clarify *)"
     ]
   }
 }

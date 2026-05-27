@@ -8,6 +8,16 @@
 
 **Input**: User description: "Please create a detailed technical and functional specification for my project "USki". USki is an intelligent, modern Next-Gen Flashcard App, initially designed as a local web app..."
 
+## Clarifications
+
+### Session 2026-05-27
+- Q: Does USki need to support multiple isolated profiles/users on the same local installation, or is it strictly a single-user application? → A: Full Multi-User (Natively Authenticated): Full FastAPI login and registration with hashed password authentication in the DB to isolate individual users strictly.
+- Q: What is the exact context boundary for the AI Chat when a user opens the chat panel during card review? → A: Deck-Wide Context with Document support. Users can attach reference documents directly to a deck to provide AI context. The system also supports standard chat threads (sessions) where users can create new chats and view older ones in history, rather than just a single hard-linked card chat.
+- Q: How should the FSRS parameters be managed and optimized in the local MVP? → A: Static Default Parameters: Use the official FSRS default weights. No local machine learning or optimizer training is executed in the MVP to keep the local CPU/memory footprint lightweight.
+- Q: What formats should the local document upload support, and how should large documents be handled in the MVP? → A: Advanced Chunking / Local RAG (Option B): Support `.txt` and text-based `.pdf` up to 50MB. Implement document chunking and local semantic search using `pgvector` in PostgreSQL to query relevant document passages before sending them as context to the AI API.
+- Q: Should flashcards and the AI model support visual/image-based content? → A: Yes. Flashcards MUST support image attachments on front/back sides, and the AI model chosen MUST support vision/multimodal capabilities to comprehend and answer questions about images inside cards or chat sessions.
+- Q: Where should the text embedding vectors be generated? → A: Cloud Embeddings (via API) (Option B): Generate text embeddings via cloud APIs (e.g. Google Gemini Embeddings API) to keep local resource overhead lightweight. Local embeddings (via offline models) are deferred as an optional post-MVP enhancement.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Flashcard Creation and Management (Priority: P1)
@@ -66,21 +76,33 @@ As a learner, I want to chat with an AI about a specific flashcard while reviewi
 ### Functional Requirements
 
 - **FR-001**: System MUST allow users to create, read, update, and delete (CRUD) decks and flashcards.
-- **FR-002**: System MUST schedule flashcard reviews using the Free Spaced Repetition Scheduler (FSRS) algorithm based on user recall ratings.
+- **FR-001b**: System MUST authenticate users via secure login and registration interfaces using FastAPI's native OAuth2/JWT and hashed password storage in the local database.
+- **FR-001c**: System MUST strictly isolate user data, ensuring users can only access their own decks, flashcards, learning state, and chat histories.
+- **FR-001d**: System MUST allow users to attach images (PNG, JPG, WebP) to both front and back contents of flashcards.
+- **FR-002**: System MUST schedule flashcard reviews using the Free Spaced Repetition Scheduler (FSRS) algorithm based on user recall ratings, utilizing its official static default parameters (weights) to keep local CPU and memory usage lightweight. Custom parameter training/optimization is out of scope for the MVP.
 - **FR-003**: System MUST store all flashcards, learning history, application logs, and chat histories securely in a local PostgreSQL database.
 - **FR-004**: System MUST run completely locally via Docker Containers, requiring no internet connection for core spaced repetition functionality.
 - **FR-005**: System MUST integrate with external AI APIs (Google Gemini, Groq, Cohere) or local endpoints (Ollama) to power the contextual chat.
-- **FR-006**: System MUST provide a chat interface alongside the flashcard review view, automatically passing the current card's content as context to the AI model.
-- **FR-007**: System MUST persist the AI chat history linked to each specific flashcard.
+- **FR-005b**: The integrated AI model MUST support multimodal vision capabilities (e.g., Gemini 1.5 Flash) to parse and understand images embedded in flashcards or uploaded into chat sessions.
+- **FR-006**: System MUST provide a chat interface alongside the flashcard review view, automatically passing the current card's content, the parent deck's content, and any attached documents as context to the AI model.
+- **FR-006b**: System MUST allow users to upload reference documents (PDF, TXT, up to 50MB) to a deck to act as learning context, extracting text and storing it locally.
+- **FR-006c**: System MUST support independent Chat Sessions (threads) within a deck, allowing users to create new chat threads, list old threads in a sidebar, delete threads, and view messages.
+- **FR-006d**: System MUST partition uploaded documents into chunks, generate embeddings for these chunks using external cloud APIs (e.g., Google Gemini Embeddings API), and implement local semantic search using a vector database extension (`pgvector` in PostgreSQL). Offline local embeddings are deferred as a post-MVP enhancement.
+- **FR-006e**: During chat reviews, the system MUST retrieve the most contextually relevant document chunks via semantic search (RAG) and pass them, along with deck and card metadata, to the AI model.
+- **FR-007**: System MUST persist the AI chat history within distinct Chat Sessions linked to the deck and (optionally) the current flashcard.
 - \*\*FR-008\*\*: System MUST support configuring AI API keys and endpoint URLs. The system MUST load default keys from environment configuration for initial setup/development, and MUST provide a UI settings page where users can override the default with their own keys.
 
 ### Key Entities
 
-- **Deck**: Represents a collection of flashcards. (Attributes: id, name, description, created_at)
-- **Flashcard**: Represents a single learning item. (Attributes: id, deck_id, front_content, back_content, created_at, updated_at)
+- **User**: Represents a registered learner. (Attributes: id, username, hashed_password, created_at)
+- **Deck**: Represents a collection of flashcards. (Attributes: id, user_id, name, description, created_at)
+- **Flashcard**: Represents a single learning item. (Attributes: id, deck_id, front_content, back_content, front_image_path (optional), back_image_path (optional), created_at, updated_at)
 - **FSRS_State**: Tracks the spaced repetition scheduling state for a flashcard. (Attributes: card_id, due_date, stability, difficulty, elapsed_days, scheduled_days, reps, lapses, state)
 - **Review_Log**: Records a single review event for analytics and FSRS optimization. (Attributes: id, card_id, rating, review_time, duration)
-- **Chat_Message**: Represents a message in the contextual AI chat. (Attributes: id, card_id, role, content, timestamp)
+- **Chat_Message**: Represents a message in a chat thread. (Attributes: id, session_id, role, content, timestamp)
+- **Chat_Session**: Represents an independent chat thread. (Attributes: id, user_id, deck_id, card_id (optional), title, created_at)
+- **Document**: Represents an uploaded document attached to a deck for AI context. (Attributes: id, deck_id, title, file_path, file_type, created_at)
+- **Document_Chunk**: Represents a chunked section of an uploaded document. (Attributes: id, document_id, content_chunk, embedding_vector, chunk_index, created_at)
 
 ## Success Criteria *(mandatory)*
 
