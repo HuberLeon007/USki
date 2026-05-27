@@ -1,50 +1,53 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!-- 
+Sync Impact Report
+- Version change: 1.0.0 -> 1.1.0
+- Modified principles:
+  - [PRINCIPLE_1_NAME] -> I. English-Only Standard
+  - [PRINCIPLE_2_NAME] -> II. 100% Perfection & Best Practices
+  - [PRINCIPLE_3_NAME] -> III. Backend Strictness (Python/FastAPI)
+  - [PRINCIPLE_4_NAME] -> IV. Frontend Strictness (React/TypeScript)
+  - [PRINCIPLE_5_NAME] -> V. Container-First & Modular Architecture
+- Added sections: None
+- Removed sections: None
+- Templates requiring updates: 
+  - .specify/templates/plan-template.md (⚠ pending)
+  - .specify/templates/spec-template.md (⚠ pending)
+  - .specify/templates/tasks-template.md (⚠ pending)
+- Follow-up TODOs: Update runtime docs with English guidelines.
+-->
+# USki Flashcard App Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. English-Only Standard
+All code, documentation, comments, variable names, logs, and commits MUST be written in English.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. 100% Perfection & Best Practices
+All code MUST adhere to the highest business and professional standards. Clean, modular, and maintainable code is expected. Work must always follow best practices. 100% perfection is the standard.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Backend Strictness (Python/FastAPI)
+- Mandatory Type Hints: All Python function arguments and return types MUST have type hints.
+- Pydantic Validation: Strict validation is required for all inputs, outputs, and data models.
+- Meaningful Logging: Structured and meaningful logging is required, utilizing `loguru`.
+- Comprehensive Docstrings: Meaningful docstrings MUST be present for all modules, classes, and functions.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Frontend Strictness (React/TypeScript)
+- Strict Typing: TypeScript MUST be used strictly. The use of `any` is strictly prohibited.
+- Best Practices: Modern React patterns (e.g., hooks) and clean component architecture MUST be followed.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. Container-First & Modular Architecture
+All services and the database MUST be containerized (Docker). The architecture MUST remain modular and adhere to separation of concerns.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+## Additional Constraints
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+All components must prioritize local-first execution. There should be no external cloud dependencies for data storage in the MVP phase. External APIs are only permitted for AI functionalities (e.g., Gemini, Groq).
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+## Development Workflow
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+Code must pass type checking, linting, and formatting before being merged. TDD and testing protocols are strongly recommended.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+Amendments require documentation, approval, and an updated version number following semantic versioning. The constitution supersedes all other practices. All PRs/reviews must verify compliance.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.1.0 | **Ratified**: 2026-05-26 | **Last Amended**: 2026-05-26

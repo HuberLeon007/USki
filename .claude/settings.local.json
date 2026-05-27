@@ -8,7 +8,12 @@
       "Bash(pipx --version)",
       "Bash(uv tool *)",
       "Bash(specify integration *)",
-      "Bash(specify *)"
+      "Bash(specify *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(.specify/extensions/git/scripts/bash/initialize-repo.sh *)",
+      "Bash(.specify/extensions/git/scripts/bash/create-new-feature.sh *)",
+      "Bash(.specify/extensions/git/scripts/bash/auto-commit.sh after_specify *)"
     ]
   }
 }
