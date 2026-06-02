@@ -76,9 +76,12 @@ As a learner, I want to chat with an AI about a specific flashcard while reviewi
 ### Functional Requirements
 
 - **FR-001**: System MUST allow users to create, read, update, and delete (CRUD) decks and flashcards.
-- **FR-001b**: System MUST authenticate users via secure login and registration interfaces using FastAPI's native OAuth2/JWT and hashed password storage in the local database.
-- **FR-001c**: System MUST strictly isolate user data, ensuring users can only access their own decks, flashcards, learning state, and chat histories.
-- **FR-001d**: System MUST allow users to attach images (PNG, JPG, WebP) to both front and back contents of flashcards.
+- **FR-001b**: System MUST authenticate users via secure login and registration interfaces using FastAPI's native OAuth2/JWT and hashed password storage in the local database. User registration requires an email address.
+- **FR-001c**: System MUST strictly isolate user data. Files and images are never directly accessible or downloadable; they are served exclusively through authenticated API endpoints.
+- **FR-001d**: System MUST provide a Rich-Text-Editor (similar to Word) for flashcards. It MUST support formatting (bold, italic, font sizes, heading templates) and Anki-style HTML/CSS templates.
+- **FR-001e**: System MUST support inline images within flashcard text, allowing multiple images to be placed at exact positions within the text, replacing the simple front/back image attachment approach.
+- **FR-001f**: System MUST enforce Two-Factor Authentication (2FA) deployed via QR Code (TOTP). A local `mailpit` Docker container MUST be used to handle system emails (e.g., 2FA setup/recovery).
+- **FR-001g**: System MUST allow users to share decks via code or link with a hierarchical permission system: `read` (view/study), `edit` (includes read), and `share` (includes edit and read).
 - **FR-002**: System MUST schedule flashcard reviews using the Free Spaced Repetition Scheduler (FSRS) algorithm based on user recall ratings, utilizing its official static default parameters (weights) to keep local CPU and memory usage lightweight. Custom parameter training/optimization is out of scope for the MVP.
 - **FR-003**: System MUST store all flashcards, learning history, application logs, and chat histories securely in a local PostgreSQL database.
 - **FR-004**: System MUST run completely locally via Docker Containers, requiring no internet connection for core spaced repetition functionality.
@@ -94,9 +97,11 @@ As a learner, I want to chat with an AI about a specific flashcard while reviewi
 
 ### Key Entities
 
-- **User**: Represents a registered learner. (Attributes: id, username, hashed_password, created_at)
+- **User**: Represents a registered learner. (Attributes: id, username, email, hashed_password, two_factor_secret, is_2fa_enabled, created_at)
 - **Deck**: Represents a collection of flashcards. (Attributes: id, user_id, name, description, created_at)
-- **Flashcard**: Represents a single learning item. (Attributes: id, deck_id, front_content, back_content, front_image_path (optional), back_image_path (optional), created_at, updated_at)
+- **Deck_Share**: Represents sharing permissions for a deck. (Attributes: id, deck_id, link_code, permission_level (read/edit/share), created_at)
+- **Flashcard**: Represents a single learning item. Uses HTML for rich text. (Attributes: id, deck_id, front_html_content, back_html_content, created_at, updated_at)
+- **File_Attachment**: Securely stored files (images, PDFs). (Attributes: id, uploader_id, file_name, file_path, mime_type, created_at)
 - **FSRS_State**: Tracks the spaced repetition scheduling state for a flashcard. (Attributes: card_id, due_date, stability, difficulty, elapsed_days, scheduled_days, reps, lapses, state)
 - **Review_Log**: Records a single review event for analytics and FSRS optimization. (Attributes: id, card_id, rating, review_time, duration)
 - **Chat_Message**: Represents a message in a chat thread. (Attributes: id, session_id, role, content, timestamp)

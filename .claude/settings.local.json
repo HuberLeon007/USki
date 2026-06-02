@@ -15,7 +15,14 @@
       "Bash(.specify/extensions/git/scripts/bash/create-new-feature.sh *)",
       "Bash(.specify/extensions/git/scripts/bash/auto-commit.sh after_specify *)",
       "Bash(powershell *)",
-      "Bash(.specify/extensions/git/scripts/bash/auto-commit.sh after_clarify *)"
+      "Bash(.specify/extensions/git/scripts/bash/auto-commit.sh after_clarify *)",
+      "mcp__upstash-context7__resolve-library-id",
+      "mcp__exa-labs-exa-mcp-server__web_search_exa",
+      "mcp__modelcontextprotocol-servers-fetch__fetch",
+      "mcp__git__git_status",
+      "mcp__sequential-thinking__sequentialthinking",
+      "Bash(powershell.exe *)",
+      "WebFetch(domain:build.nvidia.com)"
     ]
   }
 }
