@@ -1,0 +1,36 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "CLAUDE.md",
+    "README.md",
+    ".specify/memory/constitution.md",
+    "specs/001-uski-flashcard-app/plan.md"
+  ],
+  "skills": {
+    "paths": [
+      "C:\\Users\\Leone\\OneDrive - HTBLuVA Salzburg\\4AHITS\\SWE\\Projekte\\AbschlussProjekt\\.agents\\skills",
+      "C:\\Users\\Leone\\OneDrive - HTBLuVA Salzburg\\4AHITS\\SWE\\Projekte\\AbschlussProjekt\\.claude\\skills"
+    ]
+  },
+  "permission": {
+    "external_directory": {
+      "*": "ask",
+      "C:\\Users\\Leone\\OneDrive - HTBLuVA Salzburg\\4AHITS\\SWE\\Projekte\\AbschlussProjekt\\**": "allow",
+      "C:\\Users\\Leone\\AppData\\Local\\Temp\\opencode\\**": "allow"
+    },
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "npm *": "allow",
+      "npx *": "allow",
+      "uvx *": "allow",
+      "docker *": "ask",
+      "docker compose *": "ask",
+      "pytest *": "allow",
+      "python *": "allow"
+    }
+  },
+  "experimental": {
+    "mcp_timeout": 30000
+  }
+}
