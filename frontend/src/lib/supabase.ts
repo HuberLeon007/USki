@@ -1,0 +1,1 @@
+// Supabase browser client placeholder.

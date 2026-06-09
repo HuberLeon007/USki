@@ -1,0 +1,1 @@
+"""Deck schema placeholder."""

@@ -1,8 +1,8 @@
 # USki — Next-Gen Flashcard App
 
-USki ist eine intelligente, lokal gehostete Flashcard-App, die den modernen **FSRS-Algorithmus** für Spaced Repetition nutzt. Sie bietet eine NotebookLM-artige KI-Chat-Integration, einen Rich-Text-Editor für Karten sowie ein sicheres Rechte- und Sharing-System.
+USki ist eine intelligente, containerisierte Flashcard-App, die den modernen **FSRS-Algorithmus** für Spaced Repetition nutzt. Sie bietet eine NotebookLM-artige KI-Chat-Integration, einen Rich-Text-Editor für Karten sowie ein sicheres Rechte- und Sharing-System.
 
-**Kernprinzip**: Alles läuft zu 100% lokal in Docker-Containern. Externe Cloud-Anbindungen (Supabase, Cloud-Sync, Mobile Apps) sind reine optionale Erweiterungen (Post-MVP).
+**Kernprinzip**: Alles läuft in Docker-Containern mit Supabase Cloud als festem Backend (Database, Auth, Storage, Realtime). Supabase ist ein integraler Kernbestandteil der Architektur — kein optionales Feature.
 
 ---
 
@@ -10,30 +10,29 @@ USki ist eine intelligente, lokal gehostete Flashcard-App, die den modernen **FS
 
 - **Frontend**: React Router, TypeScript, Tailwind CSS
 - **Backend**: Python, FastAPI, Pydantic, Loguru
-- **Datenbank**: PostgreSQL + `pgvector` (für semantische Suche/RAG)
-- **Infrastruktur**: Docker & Docker Compose (100% lokal)
+- **Datenbank & Backend-Services**: Supabase Cloud — PostgreSQL + `pgvector` + Auth + Storage + Realtime
+- **Infrastruktur**: Docker & Docker Compose — alle Anwendungs-Container laufen isoliert, nichts nativ auf dem Host.
 - **KI & Embeddings**: API-basiert (z.B. Google Gemini 1.5 Flash für Text & Vision)
-- **E-Mail / 2FA**: Mailpit (lokaler SMTP-Server) & TOTP (QR-Code)
+- **E-Mail**: Resend SMTP (Transaktions-E-Mails über `huberleon.com`), konfiguriert in Supabase Auth.
+- **2FA**: Supabase Auth native MFA (TOTP) mit QR-Code-Enrollment.
 
 ---
 
-## 🐳 Geplante Docker-Container
+## 🐳 Docker-Container (Application Runtime)
 
-Die gesamte Architektur wird über `docker-compose` orchestriert:
+Backend und Frontend laufen **ausschließlich in Docker-Containern** — nichts wird nativ auf dem Host installiert. Alle Backend-Services (DB, Auth, Storage, Realtime, E-Mail) werden extern bereitgestellt:
 
-1. **`frontend`**: React/TypeScript Dev-Server.
-2. **`backend`**: FastAPI Python-Server.
-3. **`db`**: PostgreSQL-Datenbank inkl. `pgvector`-Erweiterung.
-4. **`mailpit`**: Lokaler E-Mail-Server für den Versand von 2FA-Codes und System-Mails.
+1. **`frontend`**: React/TypeScript (Produktions-Build via Nginx).
+2. **`backend`**: FastAPI Python-Server (Supabase JWT Validierung).
 
-*(Hinweis: Weitere Container wie Redis oder PgBouncer können bei Bedarf zur Skalierung als Erweiterung hinzugefügt werden).*
+*(Keine lokalen Service-Container — Datenbank (Supabase), E-Mails (Resend), Storage und Auth laufen vollständig extern.)*
 
 ---
 
 ## 🔐 Kernfunktionen & Sicherheit
 
-- **E-Mail & 2FA**: Jeder Nutzer benötigt eine E-Mail-Adresse. Die Zwei-Faktor-Authentifizierung (2FA) wird per QR-Code (TOTP) eingerichtet, E-Mails laufen über den lokalen Mailpit-Container.
-- **Dateisicherheit**: Es gibt **keinen direkten Dateizugriff** oder direkte Download-Links. Alle Dateien (Bilder, PDFs) liegen sicher im System/DB und werden nur über authentifizierte API-Routen (mit Token-Prüfung) ausgeliefert.
+- **E-Mail & 2FA**: Supabase Auth verwaltet die Zwei-Faktor-Authentifizierung (TOTP) nativ inklusive QR-Code-Generierung. Authentifizierungs-E-Mails (Bestätigung, Passwort-Reset, MFA) werden über **Resend SMTP** mit der Domain `huberleon.com` versendet — kein lokaler Mailserver nötig.
+- **Dateisicherheit**: Alle Dateien (Bilder, PDFs) liegen in **Supabase Storage Buckets** und werden durch **Row-Level Security (RLS)** Policies geschützt. Nur authentifizierte Nutzer mit entsprechenden Berechtigungen können auf Dateien zugreifen.
 - **Rich-Text-Editor**: Karten werden wie in Word bearbeitet (Fett, Kursiv, Schriftgröße, Überschriften). Bilder können **beliebig oft und inline** (genau an der passenden Textstelle) eingefügt werden. Der Editor unterstützt zudem HTML/CSS-Vorlagen (wie bei Anki).
 - **Sharing & Berechtigungen (RBAC)**: Decks können per Code oder Link geteilt werden. Das Berechtigungssystem ist hierarchisch:
   - `read`: Kann das Deck ansehen/lernen.
@@ -46,6 +45,6 @@ Die gesamte Architektur wird über `docker-compose` orchestriert:
 
 Das Logging wird auf **drei Ebenen** betrieben, um vollständige Transparenz und einfache Fehlersuche zu gewährleisten:
 
-1. **Container-Ebene (Docker)**: Standard-I/O-Logs aller Container (Healthchecks, Start/Stop-Events, Container-Crashes).
+1. **Container-Ebene (Docker)**: Standard-I/O-Logs der beiden Anwendungs-Container (backend, frontend).
 2. **Applikations-Ebene (FastAPI/Loguru)**: Detailliertes Logging von internen Prozessen, FSRS-Berechnungen, RAG-Pipeline-Schritten und Fehlern (Exceptions) im Backend.
 3. **Request/Zugriffs-Ebene (API/DB)**: Audit-Logs für Logins, 2FA-Versuche, Berechtigungsprüfungen (Wer hat wann auf welche geteilte Datei zugegriffen?) sowie API-Zugriffe auf geschützte Ressourcen.

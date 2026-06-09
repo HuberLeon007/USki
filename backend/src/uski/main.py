@@ -1,0 +1,1 @@
+"""USki FastAPI application entrypoint."""
