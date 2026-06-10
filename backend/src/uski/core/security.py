@@ -1,13 +1,26 @@
-"""Supabase JWT validation and current_user dependency."""
+"""Supabase JWT validation and current_user dependency.
 
+Supabase has migrated from HS256 (legacy JWT secret) to RS256 (JWKS).
+We fetch the public signing keys from Supabase's JWKS endpoint,
+cache them for 10 minutes, and use the matching key (by kid) to
+verify every incoming access token.
+"""
+
+from cachetools import TTLCache, cached
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
+from loguru import logger
 from pydantic import BaseModel
+import requests
+from requests.exceptions import RequestException
 
 from uski.core.config import settings
 
 security_scheme = HTTPBearer()
+
+# 10-minute TTL matches Supabase's key rotation window.
+_jwks_cache = TTLCache(maxsize=1, ttl=600)
 
 
 class CurrentUser(BaseModel):
@@ -17,27 +30,61 @@ class CurrentUser(BaseModel):
     email: str | None = None
 
 
+@cached(_jwks_cache)
+def _fetch_jwks() -> dict:
+    """Fetch the JWKS from Supabase. Cached for 10 minutes."""
+    logger.debug("Fetching JWKS from {}", settings.jwks_url)
+    response = requests.get(settings.jwks_url, timeout=10)
+    response.raise_for_status()
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise RequestException(f"Invalid JSON from JWKS endpoint: {exc}") from exc
+
+
+def _get_signing_key(token: str) -> dict:
+    """Extract kid from the token header and find the matching JWKS key."""
+    jwks = _fetch_jwks()
+    unverified_header = jwt.get_unverified_header(token)
+    kid = unverified_header.get("kid")
+
+    if not kid:
+        raise JWTError("Token header missing 'kid'")
+
+    for key in jwks.get("keys", []):
+        if key.get("kid") == kid:
+            return key
+
+    raise JWTError(f"No JWKS key found for kid={kid}")
+
+
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
 ) -> CurrentUser:
-    """Validate Supabase JWT and return the current user.
-
-    Supabase JWTs use HS256 with the project's JWT secret.
-    The payload contains `sub` (user id) and `email`.
-    """
+    """Validate Supabase JWT (RS256 via JWKS) and return the current user."""
     token = credentials.credentials
+
     try:
+        signing_key = _get_signing_key(token)
+        issuer = f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1"
         payload = jwt.decode(
             token,
-            settings.SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
-            options={"verify_aud": False},
+            signing_key,
+            algorithms=["RS256"],
+            audience="authenticated",
+            issuer=issuer,
         )
-    except JWTError:
+    except JWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+    except RequestException as exc:
+        logger.error("JWKS fetch failed: {}", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service temporarily unavailable",
         )
 
     user_id: str | None = payload.get("sub")

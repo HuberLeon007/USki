@@ -66,13 +66,8 @@ class TestGetMe:
         response = client.get("/api/auth/me")
         assert response.status_code == 401
 
-    def test_get_me_with_valid_token(self, client):
-        from jose import jwt
-        token = jwt.encode(
-            {"sub": "user-456", "email": "me@example.com"},
-            "test-jwt-secret-at-least-32-characters-long",
-            algorithm="HS256",
-        )
+    def test_get_me_with_valid_token(self, client, make_token):
+        token = make_token({"sub": "user-456", "email": "me@example.com"})
         response = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
         assert response.status_code == 200
         data = response.json()

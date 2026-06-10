@@ -1,1 +1,0 @@
--- Supabase seed data placeholder.
