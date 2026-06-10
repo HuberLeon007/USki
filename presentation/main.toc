@@ -1,0 +1,7 @@
+\babel@toc {ngerman}{}\relax 
+\beamer@sectionintoc {1}{Projektübersicht}{3}{0}{1}
+\beamer@sectionintoc {2}{Architektur}{4}{0}{2}
+\beamer@sectionintoc {3}{Authentifizierung}{5}{0}{3}
+\beamer@sectionintoc {4}{API-Design}{6}{0}{4}
+\beamer@sectionintoc {5}{KI-Integration}{7}{0}{5}
+\beamer@sectionintoc {6}{Zusammenfassung}{8}{0}{6}

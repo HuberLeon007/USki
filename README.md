@@ -8,7 +8,7 @@ USki ist eine intelligente, containerisierte Flashcard-App, die den modernen **F
 
 ## 🛠 Tech-Stack
 
-- **Frontend**: React Router, TypeScript, Tailwind CSS
+- **Frontend**: React Router, TypeScript, Tailwind CSS, shadcn UI
 - **Backend**: Python, FastAPI, Pydantic, Loguru
 - **Datenbank & Backend-Services**: Supabase Cloud — PostgreSQL + `pgvector` + Auth + Storage + Realtime
 - **Infrastruktur**: Docker & Docker Compose — alle Anwendungs-Container laufen isoliert, nichts nativ auf dem Host.

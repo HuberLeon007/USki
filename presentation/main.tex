@@ -1,0 +1,205 @@
+\documentclass[aspectratio=169,11pt]{beamer}
+
+\usepackage{uski-beamer}
+
+% Metadata
+\title{USki -- Moderne Flashcards}
+\subtitle{Spaced Repetition \& AI-Chat}
+\author{Leon Huber}
+\date{\today}
+\institute{HTBLuVA Salzburg}
+
+\begin{document}
+
+% Title slide
+\begin{frame}[plain]
+  \titlepage
+\end{frame}
+
+% Outline
+\begin{frame}{Agenda}
+  \tableofcontents
+\end{frame}
+
+% ---------------------------------------------------------------
+\section{Projektübersicht}
+
+\begin{frame}{Was ist USki?}
+  \begin{columns}[T]
+    \begin{column}{0.55\textwidth}
+      \textbf{USki} ist eine containerisierte Flashcard-App mit:
+      \begin{itemize}
+        \item \textbf{FSRS}-Algorithmus für Spaced Repetition
+        \item \textbf{NotebookLM}-artiger KI-Chat
+        \item Rich-Text Editor für Karten
+        \item Sicheres RBAC-Sharing-System
+      \end{itemize}
+      \vspace{8pt}
+      \textbf{Kernziele:}
+      \begin{itemize}
+        \item Effizientes, nachhaltiges Lernen
+        \item Nahtlose AI-Unterstützung
+        \item Moderne, minimalistische UX
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.40\textwidth}
+      \begin{block}{Technologie-Stack}
+        \textbf{Frontend:} React, Vite, TS, Tailwind\\[4pt]
+        \textbf{Backend:} Python, FastAPI, Pydantic\\[4pt]
+        \textbf{Cloud:} Supabase, Resend\\[4pt]
+        \textbf{KI:} Google Gemini
+      \end{block}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------
+\section{Architektur}
+
+\begin{frame}{Systemarchitektur}
+  \begin{center}
+    \resizebox{0.9\textwidth}{!}{%
+    \begin{tikzpicture}
+      % Nodes
+      \node[accentbox] (fe) {Frontend\\ React / Vite};
+      \node[accentbox, right=of fe] (be) {Backend\\ FastAPI};
+      \node[box, below=1.5cm of be] (supa) {Supabase Cloud\\ Auth, DB, Storage};
+      \node[box, right=of be] (gem) {Google Gemini\\ API};
+      \node[box, below=1.5cm of fe] (dock) {Docker Compose\\ Frontend + Backend};
+      % Arrows
+      \draw[arrow, <->] (fe) -- (be) node[midway, above, mylabel] {REST API};
+      \draw[arrow, <->] (be) -- (supa) node[midway, right, mylabel] {Auth / DB};
+      \draw[arrow, <->] (be) -- (gem) node[midway, above, mylabel] {KI};
+      \draw[arrow, dashed, gray] (fe) -- (dock);
+      \draw[arrow, dashed, gray] (be) -- (dock);
+    \end{tikzpicture}
+    }
+  \end{center}
+\end{frame}
+
+% ---------------------------------------------------------------
+\section{Authentifizierung}
+
+\begin{frame}{Passwortloser Login-Flow}
+  \textbf{Keine Passwörter. Kein Reset. Nur E-Mail-OTP.}
+  \vspace{12pt}
+  \begin{center}
+    \resizebox{0.9\textwidth}{!}{%
+    \begin{tikzpicture}
+      % Nodes
+      \node[box] (user) {User};
+      \node[box, right=2cm of user] (supa) {Supabase Auth};
+      \node[box, right=2cm of supa] (resend) {Resend SMTP};
+      \node[box, below=1.8cm of supa] (api) {FastAPI};
+      % Flow
+      \draw[arrow, ->] (user) -- (supa) node[midway, above, mylabel] {E-Mail};
+      \draw[arrow, ->] (supa) -- (resend) node[midway, above, mylabel] {OTP-Code};
+      \draw[arrow, ->] (resend) to[bend left=30] node[midway, below, mylabel, xshift=-0.5cm] {6-stell. Code} (user);
+      \draw[arrow, ->] (user) -- (api) node[midway, left, mylabel] {JWT Token};
+      \draw[arrow, ->] (api) -- (supa) node[midway, right, mylabel] {Verify};
+    \end{tikzpicture}
+    }
+  \end{center}
+\end{frame}
+
+% ---------------------------------------------------------------
+\section{API-Design}
+
+% [fragile] is required for lstlisting inside a frame
+\begin{frame}[fragile]{FastAPI Router}
+  \begin{columns}[T]
+    \begin{column}{0.50\textwidth}
+      \lstset{language=Python}
+      \begin{lstlisting}
+# backend/src/uski/api/router.py
+from fastapi import APIRouter
+
+router = APIRouter(prefix="/api/v1")
+
+@router.get("/health")
+async def health_check():
+    return {"status": "ok"}
+      \end{lstlisting}
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \textbf{Struktur:}
+      \begin{itemize}
+        \item Health-Check
+        \item Auth-Router (JWT)
+        \item Decks, Cards, Chat
+        \item File-Upload
+      \end{itemize}
+      \vspace{6pt}
+      \begin{block}{Schema-Validierung}
+        Alle Request/Response-Modelle mit \textbf{Pydantic v2}
+      \end{block}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------
+\section{KI-Integration}
+
+\begin{frame}{RAG-Pipeline}
+  \begin{columns}[T]
+    \begin{column}{0.50\textwidth}
+      \textbf{Retrieval Augmented Generation}
+      \begin{enumerate}
+        \item User fragt KI-Chat
+        \item Query wird zu Embedding
+        \item Relevante \texttt{document\_chunks} aus Supabase (pgvector)
+        \item Kontext + Prompt $\to$ Gemini
+        \item Antwort + Sources an Nutzer
+      \end{enumerate}
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{block}{Embeddings}
+        Google Gemini 1.5\\
+        \texttt{text-embedding}
+      \end{block}
+      \vspace{6pt}
+      \begin{block}{Model}
+        Gemini 1.5 Flash\\
+        Text + Vision
+      \end{block}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------
+\section{Zusammenfassung}
+
+\begin{frame}{Ausblick}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \begin{block}{In Arbeit}
+        \begin{itemize}
+          \item Docker-Compose finalisieren
+          \item Frontend-Views implementieren
+          \item Auth-Flow vollständig testen
+        \end{itemize}
+      \end{block}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Zukunft}
+        \begin{itemize}
+          \item Mobile App (React Native)
+          \item Offline-Support (PWA)
+          \item Gamification
+        \end{itemize}
+      \end{block}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}[plain]
+  \centering
+  \vfill
+  {\Large\textbf{Vielen Dank!}}
+
+  \vspace{12pt}
+  {\color{graytext} Fragen?}
+  \vfill
+\end{frame}
+
+\end{document}

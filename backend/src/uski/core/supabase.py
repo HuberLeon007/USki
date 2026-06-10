@@ -1,1 +1,15 @@
-"""Supabase client placeholder."""
+"""Supabase client initialization."""
+
+from supabase import create_client, Client
+
+from uski.core.config import settings
+
+
+def get_supabase_client() -> Client:
+    """Create a Supabase client with service-role key for backend operations."""
+    return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+
+
+def get_supabase_anon_client() -> Client:
+    """Create a Supabase client with anon key (for user-scoped operations)."""
+    return create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
