@@ -13,8 +13,8 @@ USki ist eine intelligente, containerisierte Flashcard-App, die den modernen **F
 - **Datenbank & Backend-Services**: Supabase Cloud — PostgreSQL + `pgvector` + Auth + Storage + Realtime
 - **Infrastruktur**: Docker & Docker Compose — alle Anwendungs-Container laufen isoliert, nichts nativ auf dem Host.
 - **KI & Embeddings**: API-basiert (z.B. Google Gemini 1.5 Flash für Text & Vision)
-- **E-Mail**: Resend SMTP (Transaktions-E-Mails über `huberleon.com`), konfiguriert in Supabase Auth.
-- **2FA**: Supabase Auth native MFA (TOTP) mit QR-Code-Enrollment.
+- **E-Mail Login**: Supabase Auth Passwordless OTP mit 6-stelligem E-Mail-Code. Kein Passwort und kein klassisches Register/Login mit Passwort.
+- **E-Mail Versand**: Resend SMTP (Login-Codes und Auth-E-Mails über `huberleon.com`), konfiguriert in Supabase Auth.
 
 ---
 
@@ -31,7 +31,8 @@ Backend und Frontend laufen **ausschließlich in Docker-Containern** — nichts 
 
 ## 🔐 Kernfunktionen & Sicherheit
 
-- **E-Mail & 2FA**: Supabase Auth verwaltet die Zwei-Faktor-Authentifizierung (TOTP) nativ inklusive QR-Code-Generierung. Authentifizierungs-E-Mails (Bestätigung, Passwort-Reset, MFA) werden über **Resend SMTP** mit der Domain `huberleon.com` versendet — kein lokaler Mailserver nötig.
+- **Passwortloser Login**: Nutzer melden sich nur mit ihrer E-Mail-Adresse an. Supabase Auth sendet bei jeder neuen Anmeldung einen 6-stelligen Verification Code per E-Mail. Nach erfolgreicher Code-Eingabe erhält der Client eine Supabase Session/JWT. Es gibt kein Passwort und keinen separaten Registrierungsprozess.
+- **E-Mail Versand**: Login-Codes und Auth-E-Mails werden über **Resend SMTP** mit der Domain `huberleon.com` versendet. Kein lokaler Mailserver nötig.
 - **Dateisicherheit**: Alle Dateien (Bilder, PDFs) liegen in **Supabase Storage Buckets** und werden durch **Row-Level Security (RLS)** Policies geschützt. Nur authentifizierte Nutzer mit entsprechenden Berechtigungen können auf Dateien zugreifen.
 - **Rich-Text-Editor**: Karten werden wie in Word bearbeitet (Fett, Kursiv, Schriftgröße, Überschriften). Bilder können **beliebig oft und inline** (genau an der passenden Textstelle) eingefügt werden. Der Editor unterstützt zudem HTML/CSS-Vorlagen (wie bei Anki).
 - **Sharing & Berechtigungen (RBAC)**: Decks können per Code oder Link geteilt werden. Das Berechtigungssystem ist hierarchisch:
@@ -47,4 +48,4 @@ Das Logging wird auf **drei Ebenen** betrieben, um vollständige Transparenz und
 
 1. **Container-Ebene (Docker)**: Standard-I/O-Logs der beiden Anwendungs-Container (backend, frontend).
 2. **Applikations-Ebene (FastAPI/Loguru)**: Detailliertes Logging von internen Prozessen, FSRS-Berechnungen, RAG-Pipeline-Schritten und Fehlern (Exceptions) im Backend.
-3. **Request/Zugriffs-Ebene (API/DB)**: Audit-Logs für Logins, 2FA-Versuche, Berechtigungsprüfungen (Wer hat wann auf welche geteilte Datei zugegriffen?) sowie API-Zugriffe auf geschützte Ressourcen.
+3. **Request/Zugriffs-Ebene (API/DB)**: Audit-Logs für E-Mail-Code-Logins, Berechtigungsprüfungen (Wer hat wann auf welche geteilte Datei zugegriffen?) sowie API-Zugriffe auf geschützte Ressourcen.
