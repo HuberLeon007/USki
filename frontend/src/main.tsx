@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router-dom";
 import { AuthProvider } from "./app/providers";
 import { router } from "./app/router";
+import "@fontsource/geist-sans";
+import "@fontsource/geist-mono";
 import "./index.css";
 
 createRoot(document.getElementById("root")!).render(

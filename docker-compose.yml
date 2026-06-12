@@ -4,13 +4,60 @@ services:
       context: ./backend
     env_file:
       - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # Inside Docker, Supabase runs on the host machine
+      - SUPABASE_URL=http://host.docker.internal:54321
+      - RATE_LIMIT_REDIS_URL=redis://host.docker.internal:6379
     ports:
       - "8000:8000"
+    volumes:
+      - ./backend/src:/app/src  # Hot-reload: code changes reflect instantly
+
 
   frontend:
     build:
       context: ./frontend
     env_file:
       - .env
+    environment:
+      # Browser runs on host, so it uses 127.0.0.1 (not host.docker.internal)
+      - VITE_SUPABASE_URL=http://127.0.0.1:54321
+      - VITE_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      # API proxy target for Vite dev server (Docker → host machine)
+      - VITE_API_PROXY_TARGET=http://host.docker.internal:8000
     ports:
       - "5173:5173"
+    volumes:
+      - ./frontend/src:/app/src       # Hot-reload: code changes reflect instantly
+      - ./frontend/index.html:/app/index.html
+
+  # ── Dev-only services (start with: docker compose --profile dev up) ──
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: uski-ollama
+    profiles:
+      - dev
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+
+  redis:
+    image: redis:7-alpine
+    container_name: uski-redis
+    profiles:
+      - dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+volumes:
+  ollama_data:
+  redis_data:

@@ -5,6 +5,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { ThemeProvider } from "next-themes";
+import { Toaster } from "@/components/ui/sonner";
 import { supabase } from "../lib/supabase";
 import type { Session, User } from "@supabase/supabase-js";
 
@@ -50,7 +52,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signOut,
       }}
     >
-      {children}
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="system"
+        enableSystem
+        disableTransitionOnChange
+      >
+        {children}
+        <Toaster position="top-right" richColors />
+      </ThemeProvider>
     </AuthContext.Provider>
   );
 }

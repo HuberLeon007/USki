@@ -10,12 +10,14 @@ Flow:
 4. Client logs out -> POST /api/auth/logout
 """
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, Request, status, Depends
 from loguru import logger
-from supabase import create_client
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from uski.core.config import settings
 from uski.core.security import CurrentUser, get_current_user
+from uski.core.supabase import get_supabase_anon_client
 from uski.schemas.auth import (
     AuthResponse,
     MessageResponse,
@@ -25,21 +27,18 @@ from uski.schemas.auth import (
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
-
-
-def _get_anon_client():
-    """Create a Supabase client with anon key for auth operations."""
-    return create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
+limiter = Limiter(key_func=get_remote_address, storage_uri=settings.rate_limit_storage_uri)
 
 
 @router.post("/send-otp", response_model=MessageResponse)
-async def send_otp(body: SendOtpRequest) -> MessageResponse:
+@limiter.limit(settings.RATE_LIMIT_SEND_OTP_IP)
+async def send_otp(body: SendOtpRequest, request: Request) -> MessageResponse:
     """Send a 6-digit OTP code to the given email address.
 
     Supabase Auth handles code generation and email delivery (via Resend SMTP).
     The email is sent immediately and asynchronously by Supabase.
     """
-    client = _get_anon_client()
+    client = get_supabase_anon_client()
 
     try:
         client.auth.sign_in_with_otp({"email": body.email})
@@ -53,9 +52,10 @@ async def send_otp(body: SendOtpRequest) -> MessageResponse:
 
 
 @router.post("/verify-otp", response_model=AuthResponse)
-async def verify_otp(body: VerifyOtpRequest) -> AuthResponse:
+@limiter.limit(settings.RATE_LIMIT_VERIFY_OTP_IP)
+async def verify_otp(body: VerifyOtpRequest, request: Request) -> AuthResponse:
     """Verify the 6-digit OTP code and return session tokens."""
-    client = _get_anon_client()
+    client = get_supabase_anon_client()
 
     try:
         response = client.auth.verify_otp(

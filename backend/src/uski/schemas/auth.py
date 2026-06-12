@@ -1,6 +1,6 @@
 """Auth request/response schemas."""
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class SendOtpRequest(BaseModel):
@@ -13,7 +13,14 @@ class VerifyOtpRequest(BaseModel):
     """Request to verify the 6-digit OTP code."""
 
     email: EmailStr
-    token: str  # The 6-digit code
+    token: str = Field(
+        ...,
+        min_length=6,
+        max_length=6,
+        pattern=r"^\d{6}$",
+        description="The 6-digit verification code from the email",
+        examples=["123456"],
+    )
 
 
 class AuthResponse(BaseModel):

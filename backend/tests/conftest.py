@@ -3,6 +3,9 @@ import os
 os.environ.setdefault("SUPABASE_URL", "https://test.supabase.co")
 os.environ.setdefault("SUPABASE_ANON_KEY", "test-anon-key")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
+os.environ.setdefault("APP_MODE", "test")
+os.environ.setdefault("AI_API_KEY", "test-key")
+os.environ.setdefault("AI_MODEL", "test-model")
 
 from unittest.mock import patch
 
@@ -98,6 +101,15 @@ def make_token(rsa_keys):
         )
 
     return _make
+
+
+# ---------------------------------------------------------------------------
+# Clear dependency overrides after each test.
+# ---------------------------------------------------------------------------
+@pytest.fixture(autouse=True)
+def clear_overrides():
+    yield
+    app.dependency_overrides.clear()
 
 
 # ---------------------------------------------------------------------------

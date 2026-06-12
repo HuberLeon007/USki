@@ -59,3 +59,23 @@ export async function verifyOtp(email: string, token: string) {
 export async function getMe() {
   return apiFetch<{ id: string; email: string | null }>("/api/auth/me");
 }
+
+export interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+export interface ChatResponseData {
+  message: ChatMessage;
+  model: string;
+}
+
+export async function sendChatMessage(
+  messages: ChatMessage[],
+  deckId?: string
+): Promise<ChatResponseData> {
+  return apiFetch<ChatResponseData>("/api/chat", {
+    method: "POST",
+    body: JSON.stringify({ messages, deck_id: deckId }),
+  });
+}

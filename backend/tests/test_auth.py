@@ -3,7 +3,7 @@ from unittest.mock import patch, MagicMock
 
 class TestSendOtp:
     def test_send_otp_returns_success_message(self, client):
-        with patch("uski.api.auth.create_client") as mock_create:
+        with patch("uski.api.auth.get_supabase_anon_client") as mock_create:
             mock_client = MagicMock()
             mock_create.return_value = mock_client
             mock_client.auth.sign_in_with_otp.return_value = MagicMock()
@@ -20,7 +20,7 @@ class TestSendOtp:
         assert response.status_code == 422
 
     def test_send_otp_calls_supabase(self, client):
-        with patch("uski.api.auth.create_client") as mock_create:
+        with patch("uski.api.auth.get_supabase_anon_client") as mock_create:
             mock_client = MagicMock()
             mock_create.return_value = mock_client
             mock_client.auth.sign_in_with_otp.return_value = MagicMock()
@@ -30,7 +30,7 @@ class TestSendOtp:
 
 class TestVerifyOtp:
     def test_verify_otp_success(self, client):
-        with patch("uski.api.auth.create_client") as mock_create:
+        with patch("uski.api.auth.get_supabase_anon_client") as mock_create:
             mock_client = MagicMock()
             mock_create.return_value = mock_client
             mock_session = MagicMock()
@@ -49,7 +49,7 @@ class TestVerifyOtp:
         assert data["user_id"] == "user-123"
 
     def test_verify_otp_invalid_code_returns_401(self, client):
-        with patch("uski.api.auth.create_client") as mock_create:
+        with patch("uski.api.auth.get_supabase_anon_client") as mock_create:
             mock_client = MagicMock()
             mock_create.return_value = mock_client
             mock_client.auth.verify_otp.side_effect = Exception("Invalid OTP")
@@ -84,3 +84,62 @@ class TestLogout:
         response = client.post("/api/auth/logout")
         assert response.status_code == 200
         assert "logged out" in response.json()["message"].lower()
+
+
+class TestVerifyOtpValidation:
+    """Test 6-digit code format validation."""
+
+    def test_code_too_short_returns_422(self, client):
+        response = client.post(
+            "/api/auth/verify-otp",
+            json={"email": "test@example.com", "token": "12345"},
+        )
+        assert response.status_code == 422
+
+    def test_code_too_long_returns_422(self, client):
+        response = client.post(
+            "/api/auth/verify-otp",
+            json={"email": "test@example.com", "token": "1234567"},
+        )
+        assert response.status_code == 422
+
+    def test_code_non_numeric_returns_422(self, client):
+        response = client.post(
+            "/api/auth/verify-otp",
+            json={"email": "test@example.com", "token": "abcdef"},
+        )
+        assert response.status_code == 422
+
+    def test_code_mixed_alpha_numeric_returns_422(self, client):
+        response = client.post(
+            "/api/auth/verify-otp",
+            json={"email": "test@example.com", "token": "12345a"},
+        )
+        assert response.status_code == 422
+
+    def test_code_empty_returns_422(self, client):
+        response = client.post(
+            "/api/auth/verify-otp",
+            json={"email": "test@example.com", "token": ""},
+        )
+        assert response.status_code == 422
+
+    def test_exactly_6_digits_accepted(self, client):
+        with patch("uski.api.auth.get_supabase_anon_client") as mock_create:
+            mock_client = MagicMock()
+            mock_create.return_value = mock_client
+            mock_session = MagicMock()
+            mock_session.access_token = "test-token"
+            mock_session.refresh_token = "test-refresh"
+            mock_user = MagicMock()
+            mock_user.id = "user-789"
+            mock_response = MagicMock()
+            mock_response.session = mock_session
+            mock_response.user = mock_user
+            mock_client.auth.verify_otp.return_value = mock_response
+            response = client.post(
+                "/api/auth/verify-otp",
+                json={"email": "test@example.com", "token": "654321"},
+            )
+        assert response.status_code == 200
+        assert response.json()["access_token"] == "test-token"
