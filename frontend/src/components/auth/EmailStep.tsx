@@ -1,74 +1,54 @@
-import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { Loader2, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { sendOtp } from "@/lib/api";
-import { toast } from "sonner";
 
 interface EmailStepProps {
-  onCodeSent: (email: string) => void;
+  onSubmit: (email: string) => void;
+  loading: boolean;
+  error: string | null;
 }
 
-export function EmailStep({ onCodeSent }: EmailStepProps) {
+export function EmailStep({ onSubmit, loading, error }: EmailStepProps) {
   const [email, setEmail] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setError("");
-
-    if (!email.trim()) {
-      setError("Bitte gib deine E-Mail ein.");
-      return;
+    if (email.trim()) {
+      onSubmit(email.trim());
     }
-
-    setIsLoading(true);
-    try {
-      await sendOtp(email);
-      onCodeSent(email);
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Ein Fehler ist aufgetreten.";
-      toast.error(message);
-      setError(message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="email">E-Mail</Label>
-        <Input
-          id="email"
-          type="email"
-          placeholder="name@beispiel.de"
-          autoComplete="email"
-          value={email}
-          onChange={(e) => {
-            setEmail(e.target.value);
-            if (error) setError("");
-          }}
-          disabled={isLoading}
-          autoFocus
-        />
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        <Label htmlFor="email">Email address</Label>
+        <div className="relative">
+          <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            id="email"
+            type="email"
+            placeholder="name@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="pl-10"
+            required
+            autoFocus
+            disabled={loading}
+          />
+        </div>
       </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
       <Button
         type="submit"
-        className="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:from-blue-600 hover:to-purple-600"
-        disabled={isLoading}
+        className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+        disabled={loading || !email.trim()}
       >
-        {isLoading ? (
-          <>
-            <Loader2 className="mr-2 size-4 animate-spin" />
-            Wird gesendet...
-          </>
+        {loading ? (
+          <><Loader2 className="h-4 w-4 animate-spin" /> Sending...</>
         ) : (
-          "Code senden"
+          "Send code"
         )}
       </Button>
     </form>

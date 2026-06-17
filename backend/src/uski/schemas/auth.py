@@ -30,6 +30,7 @@ class AuthResponse(BaseModel):
     refresh_token: str
     user_id: str
     email: str | None = None
+    needs_username: bool = False
 
 
 class UserResponse(BaseModel):
@@ -37,9 +38,41 @@ class UserResponse(BaseModel):
 
     id: str
     email: str | None = None
+    username: str | None = None
+    discriminator: str | None = None
+    has_username: bool = False
 
 
 class MessageResponse(BaseModel):
     """Generic message response."""
 
     message: str
+
+
+class SetUsernameRequest(BaseModel):
+    """Request to set username during onboarding."""
+
+    username: str = Field(
+        ...,
+        min_length=3,
+        max_length=20,
+        pattern=r"^[a-z0-9]+$",
+        description="Lowercase alphanumeric username, 3-20 characters",
+        examples=["leonhuber"],
+    )
+
+
+class UsernameCheckResponse(BaseModel):
+    """Response for username availability check."""
+
+    available: bool
+    username: str
+
+
+class RefreshRequest(BaseModel):
+    """Request to refresh an expired access token."""
+
+    refresh_token: str = Field(
+        ...,
+        description="The refresh token from the original login",
+    )

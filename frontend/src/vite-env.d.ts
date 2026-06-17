@@ -1,4 +1,10 @@
 /// <reference types="vite/client" />
 
-declare module "@fontsource/geist-sans";
-declare module "@fontsource/geist-mono";
+interface ImportMetaEnv {
+  readonly VITE_SUPABASE_URL: string;
+  readonly VITE_SUPABASE_ANON_KEY: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}

@@ -1,55 +1,43 @@
-import { createBrowserRouter, Navigate } from "react-router-dom";
-import LoginPage from "../pages/LoginPage";
-import DashboardPage from "../pages/DashboardPage";
-import LandingPage from "../pages/LandingPage";
-import { useAuth } from "./providers";
+import { lazy, Suspense } from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
+import { useAuth } from "./auth-context";
 import type { ReactNode } from "react";
 
+const LandingPage = lazy(() => import("@/pages/LandingPage"));
+const LoginPage = lazy(() => import("@/pages/LoginPage"));
+const DashboardPage = lazy(() => import("@/pages/DashboardPage"));
+
+function LoadingSpinner() {
+  return (
+    <div className="flex min-h-[100dvh] items-center justify-center">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-muted-foreground border-t-transparent" />
+    </div>
+  );
+}
+
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { session, loading } = useAuth();
-  if (loading) {
-    return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-background">
-        <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
-    );
-  }
-  if (!session) return <Navigate to="/login" replace />;
+  const { accessToken, loading } = useAuth();
+  if (loading) return <LoadingSpinner />;
+  if (!accessToken) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
-function GuestRoute({ children }: { children: ReactNode }) {
-  const { session, loading } = useAuth();
-  if (loading) {
-    return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-background">
-        <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
-    );
-  }
-  if (session) return <Navigate to="/dashboard" replace />;
+function PublicRoute({ children }: { children: ReactNode }) {
+  const { accessToken, loading } = useAuth();
+  if (loading) return <LoadingSpinner />;
+  if (accessToken) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 
-export const router = createBrowserRouter([
-  {
-    path: "/",
-    element: <LandingPage />,
-  },
-  {
-    path: "/login",
-    element: (
-      <GuestRoute>
-        <LoginPage />
-      </GuestRoute>
-    ),
-  },
-  {
-    path: "/dashboard",
-    element: (
-      <ProtectedRoute>
-        <DashboardPage />
-      </ProtectedRoute>
-    ),
-  },
-]);
+export function AppRouter() {
+  return (
+    <Suspense fallback={<LoadingSpinner />}>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+        <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
+  );
+}

@@ -10,19 +10,24 @@ Flow:
 4. Client logs out -> POST /api/auth/logout
 """
 
-from fastapi import APIRouter, HTTPException, Request, status, Depends
+from fastapi import APIRouter, HTTPException, Query, Request, status, Depends
 from loguru import logger
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from uski.core.config import settings
 from uski.core.security import CurrentUser, get_current_user
-from uski.core.supabase import get_supabase_anon_client
+import random
+
+from uski.core.supabase import get_supabase_anon_client, get_supabase_client
 from uski.schemas.auth import (
     AuthResponse,
     MessageResponse,
+    RefreshRequest,
     SendOtpRequest,
+    SetUsernameRequest,
     UserResponse,
+    UsernameCheckResponse,
     VerifyOtpRequest,
 )
 
@@ -82,11 +87,80 @@ async def verify_otp(body: VerifyOtpRequest, request: Request) -> AuthResponse:
     user = response.user
     logger.info(f"User authenticated: {user.id} ({body.email})")
 
+    # Check if user has set a username (first login detection)
+    needs_username = True
+    try:
+        svc_client = get_supabase_client()
+        user_row = (
+            svc_client.table("user")
+            .select("username")
+            .eq("id", user.id)
+            .execute()
+        )
+        if not user_row.data:
+            needs_username = True
+        elif user_row.data[0].get("username") is not None:
+            needs_username = False
+    except Exception as exc:
+        logger.warning(f"Failed to check username for {user.id}: {exc}")
+
     return AuthResponse(
         access_token=session.access_token,
         refresh_token=session.refresh_token,
         user_id=user.id,
         email=body.email,
+        needs_username=needs_username,
+    )
+
+
+@router.post("/refresh", response_model=AuthResponse)
+@limiter.limit(settings.RATE_LIMIT_VERIFY_OTP_IP)
+async def refresh_token(body: RefreshRequest, request: Request) -> AuthResponse:
+    """Refresh an expired access token using a valid refresh token."""
+    client = get_supabase_anon_client()
+
+    try:
+        response = client.auth.refresh_session(body.refresh_token)
+    except Exception as exc:
+        logger.warning(f"Token refresh failed: {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+
+    session = response.session
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh failed - no session returned",
+        )
+
+    user = response.user
+    logger.info(f"Token refreshed for user {user.id}")
+
+    # Check if user has set a username
+    needs_username = True
+    try:
+        svc_client = get_supabase_client()
+        user_row = (
+            svc_client.table("user")
+            .select("username")
+            .eq("id", user.id)
+            .execute()
+        )
+        if not user_row.data:
+            needs_username = True
+        elif user_row.data[0].get("username") is not None:
+            needs_username = False
+    except Exception as exc:
+        logger.warning(f"Failed to check username for {user.id}: {exc}")
+
+    return AuthResponse(
+        access_token=session.access_token,
+        refresh_token=session.refresh_token,
+        user_id=user.id,
+        email=user.email,
+        needs_username=needs_username,
     )
 
 
@@ -95,10 +169,136 @@ async def get_me(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> UserResponse:
     """Return the currently authenticated user info (requires valid JWT)."""
-    return UserResponse(id=current_user.id, email=current_user.email)
+    has_username = True
+    username = None
+    discriminator = None
+    try:
+        svc_client = get_supabase_client()
+        user_row = (
+            svc_client.table("user")
+            .select("username, discriminator")
+            .eq("id", current_user.id)
+            .execute()
+        )
+        if user_row.data:
+            row = user_row.data[0]
+            username = row.get("username")
+            discriminator = row.get("discriminator")
+            if username is None:
+                has_username = False
+        else:
+            has_username = False
+    except Exception as exc:
+        logger.warning(f"Failed to check username for /me {current_user.id}: {exc}")
+
+    return UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        username=username,
+        discriminator=discriminator,
+        has_username=has_username,
+    )
 
 
 @router.post("/logout", response_model=MessageResponse)
 async def logout() -> MessageResponse:
     """Logout endpoint. Client should discard tokens after calling this."""
     return MessageResponse(message="Logged out successfully. Please discard your tokens.")
+
+
+@router.post("/set-username", response_model=UserResponse)
+async def set_username(
+    body: SetUsernameRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> UserResponse:
+    """Set the username for the current user (first-time onboarding).
+
+    Generates a random 4-digit discriminator. Retries up to 10 times
+    if the username#discriminator combination is already taken.
+    """
+    svc_client = get_supabase_client()
+
+    # Guard: prevent re-setting username
+    existing_user = (
+        svc_client.table("user")
+        .select("username")
+        .eq("id", current_user.id)
+        .execute()
+    )
+    if existing_user.data and existing_user.data[0].get("username") is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Username already set",
+        )
+
+    for _attempt in range(10):
+        discriminator = f"{random.randint(0, 9999):04d}"
+
+        # Check if this combo is taken
+        existing = (
+            svc_client.table("user")
+            .select("id")
+            .eq("username", body.username)
+            .eq("discriminator", discriminator)
+            .execute()
+        )
+
+        if existing.data:
+            continue  # Collision, try another discriminator
+
+        # Set username
+        result = (
+            svc_client.table("user")
+            .update({"username": body.username, "discriminator": discriminator})
+            .eq("id", current_user.id)
+            .execute()
+        )
+
+        if result.data:
+            logger.info(
+                f"Username set: {current_user.id} -> {body.username}#{discriminator}"
+            )
+            return UserResponse(
+                id=current_user.id,
+                email=current_user.email,
+                username=body.username,
+                discriminator=discriminator,
+                has_username=True,
+            )
+
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Failed to set username after multiple attempts",
+    )
+
+
+@router.get("/check-username", response_model=UsernameCheckResponse)
+async def check_username(
+    username: str = Query(
+        ...,
+        min_length=3,
+        max_length=20,
+        pattern=r"^[a-z0-9]+$",
+        description="Lowercase alphanumeric username to check",
+    ),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> UsernameCheckResponse:
+    """Check if a username is available.
+
+    Note: Usernames are NOT unique by themselves - only the
+    username#discriminator combo is unique. This endpoint checks
+    if ANY user has this username (to give a sense of availability).
+    """
+    svc_client = get_supabase_client()
+
+    existing = (
+        svc_client.table("user")
+        .select("id")
+        .eq("username", username)
+        .execute()
+    )
+
+    return UsernameCheckResponse(
+        available=len(existing.data) == 0,
+        username=username,
+    )

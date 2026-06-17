@@ -1,74 +1,26 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
-import { ThemeProvider } from "next-themes";
-import { Toaster } from "@/components/ui/sonner";
-import { supabase } from "../lib/supabase";
-import type { Session, User } from "@supabase/supabase-js";
+import { ThemeProvider as NextThemeProvider } from "next-themes";
+import type { ReactNode } from "react";
 
-interface AuthContextType {
-  session: Session | null;
-  user: User | null;
-  loading: boolean;
-  signOut: () => Promise<void>;
+interface ThemeProviderProps {
+  children: ReactNode;
+  defaultTheme?: string;
+  storageKey?: string;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    setSession(null);
-  };
-
+export function ThemeProvider({
+  children,
+  defaultTheme = "system",
+  storageKey = "uski-theme",
+}: ThemeProviderProps) {
   return (
-    <AuthContext.Provider
-      value={{
-        session,
-        user: session?.user ?? null,
-        loading,
-        signOut,
-      }}
+    <NextThemeProvider
+      attribute="class"
+      defaultTheme={defaultTheme}
+      enableSystem
+      disableTransitionOnChange
+      storageKey={storageKey}
     >
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="system"
-        enableSystem
-        disableTransitionOnChange
-      >
-        {children}
-        <Toaster position="top-right" richColors />
-      </ThemeProvider>
-    </AuthContext.Provider>
+      {children}
+    </NextThemeProvider>
   );
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
 }
