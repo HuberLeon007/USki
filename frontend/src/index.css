@@ -4,6 +4,7 @@
 @import "@fontsource/geist-sans/600.css";
 @import "@fontsource/geist-sans/700.css";
 @import "@fontsource/geist-mono/400.css";
+@import "@fontsource/geist-mono/500.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -11,47 +12,112 @@
   --font-sans: "Geist Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, monospace;
 
-  --color-background: hsl(250 10% 97%);
-  --color-foreground: hsl(250 15% 8%);
+  /* Light mode — kept clean, supportive of the dark-first identity */
+  --color-background: hsl(250 20% 98%);
+  --color-foreground: hsl(250 20% 9%);
   --color-card: hsl(0 0% 100%);
-  --color-card-foreground: hsl(250 15% 8%);
-  --color-muted: hsl(250 8% 92%);
-  --color-muted-foreground: hsl(250 6% 46%);
-  --color-border: hsl(250 10% 88%);
-  --color-input: hsl(250 10% 88%);
-  --color-ring: hsl(263 70% 50%);
-  --color-primary: hsl(263 70% 50%);
+  --color-card-foreground: hsl(250 20% 9%);
+  --color-surface: hsl(250 16% 96%);
+  --color-overlay: hsl(0 0% 100%);
+  --color-muted: hsl(250 12% 93%);
+  --color-muted-foreground: hsl(250 6% 44%);
+  --color-border: hsl(250 12% 89%);
+  --color-input: hsl(250 12% 89%);
+  --color-ring: hsl(263 70% 55%);
+  --color-primary: hsl(263 70% 55%);
   --color-primary-foreground: hsl(0 0% 100%);
-  --color-secondary: hsl(250 8% 92%);
-  --color-secondary-foreground: hsl(250 15% 8%);
+  --color-secondary: hsl(250 12% 93%);
+  --color-secondary-foreground: hsl(250 20% 9%);
   --color-destructive: hsl(0 72% 51%);
   --color-destructive-foreground: hsl(0 0% 100%);
-  --color-accent: hsl(263 60% 94%);
+  --color-accent: hsl(263 60% 95%);
   --color-accent-foreground: hsl(263 70% 40%);
-  --color-radius: 0.625rem;
+
+  /* FSRS state accents — semantic, used as data colors */
+  --color-state-new: hsl(199 89% 48%);
+  --color-state-learn: hsl(38 92% 50%);
+  --color-state-due: hsl(263 70% 55%);
+
+  --radius: 0.75rem;
 }
 
 .dark {
-  --color-background: hsl(250 15% 6%);
-  --color-foreground: hsl(250 8% 92%);
-  --color-card: hsl(250 12% 9%);
-  --color-card-foreground: hsl(250 8% 92%);
-  --color-muted: hsl(250 10% 14%);
-  --color-muted-foreground: hsl(250 6% 55%);
-  --color-border: hsl(250 10% 18%);
-  --color-input: hsl(250 10% 18%);
-  --color-ring: hsl(263 60% 60%);
-  --color-primary: hsl(263 60% 60%);
-  --color-primary-foreground: hsl(0 0% 100%);
-  --color-secondary: hsl(250 10% 14%);
-  --color-secondary-foreground: hsl(250 8% 92%);
-  --color-destructive: hsl(0 62% 30%);
+  /* Dark mode — default. Softer near-black with a faint violet tint (Obsidian-leaning).
+     The background luminance floor is kept above pure black — explicitly NOT #000000 (R2.1, A2) —
+     to reduce harsh contrast, with card/surface raised in step to preserve their separation. */
+  --color-background: hsl(250 16% 9%); /* softer near-black (was 7%); never pure black */
+  --color-foreground: hsl(250 14% 92%);
+  --color-card: hsl(250 14% 12%); /* raised from 10% to keep card/background contrast */
+  --color-card-foreground: hsl(250 14% 92%);
+  --color-surface: hsl(250 14% 12%); /* raised from 10% to keep surface/background contrast */
+  --color-overlay: hsl(250 12% 13%);
+  --color-muted: hsl(250 12% 15%);
+  --color-muted-foreground: hsl(250 8% 58%);
+  --color-border: hsl(250 12% 16%);
+  --color-input: hsl(250 12% 17%);
+  --color-ring: hsl(263 70% 66%);
+  --color-primary: hsl(263 70% 66%);
+  --color-primary-foreground: hsl(250 30% 6%);
+  --color-secondary: hsl(250 12% 15%);
+  --color-secondary-foreground: hsl(250 14% 92%);
+  --color-destructive: hsl(0 70% 60%);
   --color-destructive-foreground: hsl(0 0% 100%);
-  --color-accent: hsl(250 10% 14%);
-  --color-accent-foreground: hsl(250 8% 92%);
+  --color-accent: hsl(250 14% 16%);
+  --color-accent-foreground: hsl(250 14% 92%);
+
+  --color-state-new: hsl(199 89% 62%);
+  --color-state-learn: hsl(38 95% 62%);
+  --color-state-due: hsl(263 70% 66%);
 }
 
 @layer base {
-  * { @apply border-border; }
-  body { @apply bg-background text-foreground font-sans antialiased; }
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+  /* Mono utility data-label: the structural device for stats/labels */
+  .label-mono {
+    @apply font-mono text-[0.6875rem] font-medium uppercase tracking-[0.14em] text-muted-foreground;
+  }
+}
+
+@layer utilities {
+  /* Card-stack signature: layered translucent surfaces */
+  .stack-glow {
+    box-shadow:
+      0 0 0 1px hsl(263 70% 66% / 0.08),
+      0 8px 40px -12px hsl(263 70% 50% / 0.35);
+  }
+  .ring-focus-violet:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px var(--color-background),
+      0 0 0 4px var(--color-primary);
+  }
+
+  @keyframes drift-a {
+    0%, 100% { transform: translate(0, 0) rotate(-8deg); }
+    50% { transform: translate(0, -14px) rotate(-6deg); }
+  }
+  @keyframes drift-b {
+    0%, 100% { transform: translate(0, 0) rotate(6deg); }
+    50% { transform: translate(0, 12px) rotate(8deg); }
+  }
+  @keyframes drift-c {
+    0%, 100% { transform: translate(0, 0) rotate(-2deg); }
+    50% { transform: translate(0, -8px) rotate(0deg); }
+  }
+  .animate-drift-a { animation: drift-a 11s ease-in-out infinite; }
+  .animate-drift-b { animation: drift-b 13s ease-in-out infinite; }
+  .animate-drift-c { animation: drift-c 9s ease-in-out infinite; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-drift-a,
+    .animate-drift-b,
+    .animate-drift-c {
+      animation: none;
+    }
+  }
 }

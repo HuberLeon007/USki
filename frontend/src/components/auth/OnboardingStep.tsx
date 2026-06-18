@@ -20,12 +20,30 @@ import {
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-interface UsernameDialogProps {
+interface OnboardingStepProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function UsernameDialog({ open, onOpenChange }: UsernameDialogProps) {
+/**
+ * Onboarding step shown when a first-time user has no username yet.
+ *
+ * It keeps the claim UI (username field + live availability via `checkUsername`,
+ * submit via `setUsername`) and an always-present skip control (R8.1).
+ *
+ * On SKIP, a username is DERIVED from the user's email
+ * (`deriveUsernameFromEmail`) and ASSIGNED through `setUsername` so onboarding
+ * truly completes — there is no "skip without assigning" path. Because
+ * `needs_username` is derived from username presence on the backend, assigning
+ * a username (by claim OR skip) means onboarding is never shown again on
+ * subsequent logins (R8.2, R8.3, R8.4). The `user####` fallback for short or
+ * empty local parts is handled inside `deriveUsernameFromEmail` (R8.5, R8.6).
+ *
+ * Both `checkUsername`/`setUsername` are authenticated (`requireAuth`). When the
+ * session can no longer be recovered, `apiFetch` throws `SessionExpiredError`;
+ * we then route the user back to the Login email step via `endSession()` (R1.3).
+ */
+export function OnboardingStep({ open, onOpenChange }: OnboardingStepProps) {
   const { user, setNeedsUsername, endSession } = useAuth();
   const [username, setUsernameValue] = useState("");
   const [suggestion, setSuggestion] = useState("");
@@ -69,7 +87,7 @@ export function UsernameDialog({ open, onOpenChange }: UsernameDialogProps) {
       }
     }, 400);
     return () => clearTimeout(debounceRef.current);
-  }, [username]);
+  }, [username, endSession]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -78,6 +96,8 @@ export function UsernameDialog({ open, onOpenChange }: UsernameDialogProps) {
     setError(null);
     try {
       await setUsername(username);
+      // Username assigned → needs_username becomes false → onboarding is never
+      // shown again (R8.4).
       setNeedsUsername(false);
       onOpenChange(false);
     } catch (err) {
@@ -98,10 +118,9 @@ export function UsernameDialog({ open, onOpenChange }: UsernameDialogProps) {
 
   /**
    * Skip onboarding by DERIVING and ASSIGNING a username from the user's email
-   * (R8.2) and submitting it via `setUsername` so onboarding truly completes
-   * and is not shown again (R8.3, R8.4). The `user####` fallback for short or
-   * empty local parts is handled in `deriveUsernameFromEmail` (R8.5, R8.6).
-   * This replaces the previous "skip without assigning" behavior.
+   * (R8.2). The derivation (including the `user####` fallback) lives in
+   * `deriveUsernameFromEmail` (R8.5, R8.6). Submitting via `setUsername`
+   * completes onboarding so it is not shown again (R8.3, R8.4).
    */
   async function handleSkip() {
     if (!user?.email) return;
@@ -118,6 +137,8 @@ export function UsernameDialog({ open, onOpenChange }: UsernameDialogProps) {
         return;
       }
       if (err instanceof ApiError && err.status === 409) {
+        // Extremely unlikely for a derived name, but surface a retry path
+        // rather than leaving the user stuck.
         setError("Couldn't assign a default username. Please pick one.");
       } else {
         setError("Something went wrong. Please try again.");
@@ -162,13 +183,13 @@ export function UsernameDialog({ open, onOpenChange }: UsernameDialogProps) {
 
         <form onSubmit={handleSubmit} className="space-y-4 px-7 pb-7 pt-5">
           <div className="space-y-2">
-            <Label htmlFor="username-dialog" className="label-mono">
+            <Label htmlFor="username-onboarding" className="label-mono">
               Username
             </Label>
             <div className="group relative">
               <AtSign className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
               <input
-                id="username-dialog"
+                id="username-onboarding"
                 type="text"
                 placeholder="leonhuber"
                 value={username}

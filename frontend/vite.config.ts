@@ -5,17 +5,28 @@ import path from "path";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, path.resolve(__dirname, ".."), "");
+  const isDocker = process.env.DOCKER_ENV === "true";
+  
   return {
     plugins: [react(), tailwindcss()],
     resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
     server: {
       port: 5173,
+      host: "0.0.0.0",
       proxy: {
         "/api": {
           target: env.VITE_API_PROXY_TARGET || "http://localhost:8000",
           changeOrigin: true,
         },
       },
+      // HMR configuration for Docker
+      hmr: isDocker
+        ? {
+            host: "localhost",
+            port: 5173,
+            protocol: "ws",
+          }
+        : undefined,
     },
     define: {
       "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(

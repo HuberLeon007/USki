@@ -7,7 +7,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { getMe, refreshToken, type UserResponse } from "@/lib/api";
+import { useNavigate } from "react-router-dom";
+import {
+  getMe,
+  refreshToken,
+  tokenStorage,
+  type UserResponse,
+} from "@/lib/api";
 
 interface AuthState {
   accessToken: string | null;
@@ -25,22 +31,29 @@ interface AuthContextValue extends AuthState {
     needsUsername: boolean,
   ) => void;
   clearSession: () => void;
+  /**
+   * Clears the session and routes back to the Login page email step. Callers
+   * that catch `SessionExpiredError` from `apiFetch` invoke this so an expired
+   * or unrecoverable session ends consistently (R1.3, R1.7).
+   */
+  endSession: () => void;
   setNeedsUsername: (value: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const navigate = useNavigate();
   const [state, setState] = useState<AuthState>({
-    accessToken: localStorage.getItem("uski_access_token"),
+    accessToken: tokenStorage.getAccess(),
     user: null,
     needsUsername: false,
     loading: true,
   });
 
   useEffect(() => {
-    const token = localStorage.getItem("uski_access_token");
-    const refresh = localStorage.getItem("uski_refresh_token");
+    const token = tokenStorage.getAccess();
+    const refresh = tokenStorage.getRefresh();
 
     if (!token) {
       setState((s) => ({ ...s, loading: false }));
@@ -58,8 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .catch(async () => {
         if (!refresh) {
-          localStorage.removeItem("uski_access_token");
-          localStorage.removeItem("uski_refresh_token");
+          tokenStorage.clear();
           setState({
             accessToken: null,
             user: null,
@@ -71,8 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         try {
           const result = await refreshToken(refresh);
-          localStorage.setItem("uski_access_token", result.access_token);
-          localStorage.setItem("uski_refresh_token", result.refresh_token);
+          tokenStorage.set(result.access_token, result.refresh_token);
           setState({
             accessToken: result.access_token,
             user: { id: result.user_id, email: result.email },
@@ -80,8 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             loading: false,
           });
         } catch {
-          localStorage.removeItem("uski_access_token");
-          localStorage.removeItem("uski_refresh_token");
+          tokenStorage.clear();
           setState({
             accessToken: null,
             user: null,
@@ -100,8 +110,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: string | null,
       needsUsername: boolean,
     ) => {
-      localStorage.setItem("uski_access_token", accessToken);
-      localStorage.setItem("uski_refresh_token", refreshTokenValue);
+      // Persist tokens synchronously BEFORE returning so any navigation or
+      // onboarding request issued right after always sees the stored tokens
+      // (R1.1).
+      tokenStorage.set(accessToken, refreshTokenValue);
       setState({
         accessToken,
         user: { id: userId, email },
@@ -113,8 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const clearSession = useCallback(() => {
-    localStorage.removeItem("uski_access_token");
-    localStorage.removeItem("uski_refresh_token");
+    tokenStorage.clear();
     setState({
       accessToken: null,
       user: null,
@@ -123,13 +134,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const endSession = useCallback(() => {
+    clearSession();
+    navigate("/login", { replace: true });
+  }, [clearSession, navigate]);
+
   const setNeedsUsername = useCallback((value: boolean) => {
     setState((s) => ({ ...s, needsUsername: value }));
   }, []);
 
   const value = useMemo(
-    () => ({ ...state, setSession, clearSession, setNeedsUsername }),
-    [state, setSession, clearSession, setNeedsUsername],
+    () => ({ ...state, setSession, clearSession, endSession, setNeedsUsername }),
+    [state, setSession, clearSession, endSession, setNeedsUsername],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

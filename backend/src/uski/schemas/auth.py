@@ -62,6 +62,19 @@ class SetUsernameRequest(BaseModel):
     )
 
 
+class ChangeUsernameRequest(BaseModel):
+    """Request to change an existing username (Settings)."""
+
+    username: str = Field(
+        ...,
+        min_length=3,
+        max_length=20,
+        pattern=r"^[a-z0-9]+$",
+        description="Lowercase alphanumeric username, 3-20 characters",
+        examples=["leonhuber"],
+    )
+
+
 class UsernameCheckResponse(BaseModel):
     """Response for username availability check."""
 

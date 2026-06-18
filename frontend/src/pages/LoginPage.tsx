@@ -2,13 +2,14 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { useTheme } from "next-themes";
-import { Moon, Sun } from "lucide-react";
+import { Moon, Sun, ArrowLeft } from "lucide-react";
 import { sendOtp, verifyOtp, ApiError } from "@/lib/api";
 import { useAuth } from "@/app/auth-context";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EmailStep } from "@/components/auth/EmailStep";
-import { OtpStep } from "@/components/auth/OtpStep";
+import { OtpStep, type OtpStatus, type OtpErrorKind } from "@/components/auth/OtpStep";
+import { CardStackBackdrop } from "@/components/CardStackBackdrop";
+import { Logo } from "@/components/Logo";
 
 type Step = "email" | "otp";
 
@@ -22,6 +23,11 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // OTP verification status drives the OtpStep success-animation phase machine (R7).
+  const [otpStatus, setOtpStatus] = useState<OtpStatus>("idle");
+  const [otpErrorKind, setOtpErrorKind] = useState<OtpErrorKind>(null);
+
+  const otpBusy = otpStatus === "verifying" || otpStatus === "verified";
 
   async function handleEmailSubmit(emailValue: string) {
     setLoading(true);
@@ -29,23 +35,23 @@ export default function LoginPage() {
     setEmail(emailValue);
     try {
       await sendOtp(emailValue);
+      setOtpStatus("idle");
+      setOtpErrorKind(null);
       setStep("otp");
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("Something went wrong. Please try again.");
-      }
+      setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
   }
 
   async function handleOtpSubmit(code: string) {
-    setLoading(true);
     setError(null);
+    setOtpErrorKind(null);
+    setOtpStatus("verifying");
     try {
       const result = await verifyOtp(email, code);
+      // Persist tokens synchronously before showing the success animation (R7.5 / R1.1).
       setSession(
         result.access_token,
         result.refresh_token,
@@ -53,32 +59,40 @@ export default function LoginPage() {
         result.email,
         result.needs_username,
       );
-      // Brief delay for success animation before navigating
-      await new Promise((r) => setTimeout(r, 600));
-      if (result.needs_username) {
-        navigate("/setup-username", { replace: true });
-      } else {
-        navigate("/dashboard", { replace: true });
-      }
+      // Hand off to OtpStep — navigation is gated on onSuccessComplete (R7.4/R7.5),
+      // it must NOT happen here before the animation sequence finishes.
+      setOtpStatus("verified");
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
+        // R7.6: wrong code → error feedback, clear digits, no success animation.
+        setOtpErrorKind("invalid");
         setError("Wrong code. Please try again.");
       } else {
+        // R7.7: network/service error → error feedback, retain digits, no success animation.
+        setOtpErrorKind("network");
         setError("Verification failed. Please try again.");
       }
-    } finally {
-      setLoading(false);
+      setOtpStatus("error");
     }
+  }
+
+  // Invoked by OtpStep only after green → spinner → checkmark → transition completes (R7.4/R7.5).
+  function handleSuccessComplete() {
+    navigate("/dashboard", { replace: true });
   }
 
   function handleBack() {
     setStep("email");
     setError(null);
+    setOtpStatus("idle");
+    setOtpErrorKind(null);
   }
 
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4">
-      <div className="absolute right-4 top-4">
+    <div className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden bg-background px-4">
+      <CardStackBackdrop />
+
+      <div className="absolute right-4 top-4 z-20">
         <Button
           variant="ghost"
           size="icon"
@@ -89,60 +103,84 @@ export default function LoginPage() {
           <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
         </Button>
       </div>
-      <div className="w-full max-w-md space-y-6">
-        <div className="text-center space-y-3">
-          <Link to="/" className="inline-flex items-center gap-2.5">
-            <img src="/logo.png" alt="USki" className="h-10 w-10 rounded-xl" />
-            <span className="text-2xl font-bold tracking-tight">
-              <span className="text-primary">US</span>ki
-            </span>
+
+      <motion.div
+        initial={reduce ? false : { opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        className="relative z-10 w-full max-w-[26rem]"
+      >
+        <div className="mb-8 flex flex-col items-center gap-5 text-center">
+          <Link to="/" aria-label="USki home">
+            <Logo imgClassName="h-16 w-16" textClassName="text-3xl" />
           </Link>
         </div>
-        <Card className="border-border/60 shadow-lg shadow-primary/5">
-          <CardHeader className="text-center pb-2 pt-8">
-            <CardTitle className="text-2xl">
-              {step === "email" ? "Welcome to USki" : "Enter code"}
-            </CardTitle>
-            <CardDescription className="mt-1">
-              {step === "email"
-                ? "Enter your email to receive a sign-in code."
-                : "Check your inbox."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="px-8 pb-8">
+
+        {/* Auth surface — a single raised card, the focal layer of the stack */}
+        <div className="rounded-2xl border border-border/70 bg-card/80 p-7 backdrop-blur-xl stack-glow sm:p-8">
+          <div className="mb-6 space-y-1.5">
             <AnimatePresence mode="wait">
               <motion.div
                 key={step}
-                initial={reduce ? false : { opacity: 0, y: 8 }}
+                initial={reduce ? false : { opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={reduce ? undefined : { opacity: 0, y: -8 }}
-                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                exit={reduce ? undefined : { opacity: 0, y: -6 }}
+                transition={{ duration: 0.2 }}
               >
-                {step === "email" ? (
-                  <EmailStep
-                    onSubmit={handleEmailSubmit}
-                    loading={loading}
-                    error={error}
-                  />
-                ) : (
-                  <OtpStep
-                    email={email}
-                    onSubmit={handleOtpSubmit}
-                    onBack={handleBack}
-                    loading={loading}
-                    error={error}
-                  />
+                {step === "otp" && (
+                  <button
+                    onClick={handleBack}
+                    disabled={loading || otpBusy}
+                    className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    Back
+                  </button>
                 )}
+                <h1 className="text-xl font-semibold tracking-tight">
+                  {step === "email" ? "Sign in to USki" : "Check your email"}
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  {step === "email"
+                    ? "We'll email you a one-time code. No password needed."
+                    : "Enter the 6-digit code we just sent you."}
+                </p>
               </motion.div>
             </AnimatePresence>
-          </CardContent>
-        </Card>
-        <p className="text-center text-sm text-muted-foreground">
-          <Link to="/" className="hover:text-foreground transition-colors">
+          </div>
+
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={step}
+              initial={reduce ? false : { opacity: 0, x: step === "otp" ? 16 : -16 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={reduce ? undefined : { opacity: 0, x: step === "otp" ? -16 : 16 }}
+              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            >
+              {step === "email" ? (
+                <EmailStep onSubmit={handleEmailSubmit} loading={loading} error={error} />
+              ) : (
+                <OtpStep
+                  email={email}
+                  onSubmit={handleOtpSubmit}
+                  onResend={() => sendOtp(email)}
+                  onBack={handleBack}
+                  status={otpStatus}
+                  error={error}
+                  errorKind={otpErrorKind}
+                  onSuccessComplete={handleSuccessComplete}
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
+        <p className="mt-6 text-center text-sm text-muted-foreground">
+          <Link to="/" className="transition-colors hover:text-foreground">
             Back to home
           </Link>
         </p>
-      </div>
+      </motion.div>
     </div>
   );
 }

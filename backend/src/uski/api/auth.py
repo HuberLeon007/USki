@@ -22,6 +22,7 @@ import random
 from uski.core.supabase import get_supabase_anon_client, get_supabase_client
 from uski.schemas.auth import (
     AuthResponse,
+    ChangeUsernameRequest,
     MessageResponse,
     RefreshRequest,
     SendOtpRequest,
@@ -33,6 +34,50 @@ from uski.schemas.auth import (
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 limiter = Limiter(key_func=get_remote_address, storage_uri=settings.rate_limit_storage_uri)
+
+
+def _assign_username(svc_client, user_id: str, username: str) -> str:
+    """Assign a username to a user, generating a free 4-digit discriminator.
+
+    Retries up to 10 times if the username#discriminator combination is already
+    taken. Performs an UPDATE regardless of whether a username is already set, so
+    it is reused by both first-time onboarding (set_username) and later changes
+    (change_username).
+
+    Returns the assigned discriminator on success.
+    Raises HTTPException(500) if no free discriminator is found after 10 attempts.
+    """
+    for _attempt in range(10):
+        discriminator = f"{random.randint(0, 9999):04d}"
+
+        # Check if this username#discriminator combo is taken
+        existing = (
+            svc_client.table("user")
+            .select("id")
+            .eq("username", username)
+            .eq("discriminator", discriminator)
+            .execute()
+        )
+
+        if existing.data:
+            continue  # Collision, try another discriminator
+
+        # Assign username + discriminator
+        result = (
+            svc_client.table("user")
+            .update({"username": username, "discriminator": discriminator})
+            .eq("id", user_id)
+            .execute()
+        )
+
+        if result.data:
+            logger.info(f"Username assigned: {user_id} -> {username}#{discriminator}")
+            return discriminator
+
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Failed to assign username after multiple attempts",
+    )
 
 
 @router.post("/send-otp", response_model=MessageResponse)
@@ -231,44 +276,37 @@ async def set_username(
             detail="Username already set",
         )
 
-    for _attempt in range(10):
-        discriminator = f"{random.randint(0, 9999):04d}"
+    discriminator = _assign_username(svc_client, current_user.id, body.username)
+    return UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        username=body.username,
+        discriminator=discriminator,
+        has_username=True,
+    )
 
-        # Check if this combo is taken
-        existing = (
-            svc_client.table("user")
-            .select("id")
-            .eq("username", body.username)
-            .eq("discriminator", discriminator)
-            .execute()
-        )
 
-        if existing.data:
-            continue  # Collision, try another discriminator
+@router.patch("/username", response_model=UserResponse)
+async def change_username(
+    body: ChangeUsernameRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> UserResponse:
+    """Update the current user's username (allowed even when one is already set).
 
-        # Set username
-        result = (
-            svc_client.table("user")
-            .update({"username": body.username, "discriminator": discriminator})
-            .eq("id", current_user.id)
-            .execute()
-        )
+    Unlike set_username (onboarding), this performs an UPDATE regardless of
+    whether the user already has a username, so there is no 409 conflict.
+    Generates a fresh 4-digit discriminator and retries on collision via the
+    shared _assign_username helper.
+    """
+    svc_client = get_supabase_client()
 
-        if result.data:
-            logger.info(
-                f"Username set: {current_user.id} -> {body.username}#{discriminator}"
-            )
-            return UserResponse(
-                id=current_user.id,
-                email=current_user.email,
-                username=body.username,
-                discriminator=discriminator,
-                has_username=True,
-            )
-
-    raise HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail="Failed to set username after multiple attempts",
+    discriminator = _assign_username(svc_client, current_user.id, body.username)
+    return UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        username=body.username,
+        discriminator=discriminator,
+        has_username=True,
     )
 
 
