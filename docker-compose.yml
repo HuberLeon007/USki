@@ -9,6 +9,8 @@ services:
     environment:
       # Inside Docker, Supabase runs on the host machine
       - SUPABASE_URL=http://host.docker.internal:54321
+      # Browser-facing URL = token issuer (must match what the client uses)
+      - SUPABASE_PUBLIC_URL=http://127.0.0.1:54321
       - RATE_LIMIT_REDIS_URL=redis://host.docker.internal:6379
     ports:
       - "8000:8000"

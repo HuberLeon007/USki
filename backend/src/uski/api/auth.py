@@ -36,21 +36,17 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 limiter = Limiter(key_func=get_remote_address, storage_uri=settings.rate_limit_storage_uri)
 
 
-def _assign_username(svc_client, user_id: str, username: str) -> str:
+def _assign_username(svc_client, user_id: str, username: str, desired_disc: str | None = None) -> str:
     """Assign a username to a user, generating a free 4-digit discriminator.
 
-    Retries up to 10 times if the username#discriminator combination is already
-    taken. Performs an UPDATE regardless of whether a username is already set, so
-    it is reused by both first-time onboarding (set_username) and later changes
-    (change_username).
+    If `desired_disc` is given, try exactly that one (raises 409 if the
+    username#discriminator combo is taken). Otherwise pick a random free one,
+    retrying up to 10 times. Random (not sequential) so handles aren't guessable.
 
     Returns the assigned discriminator on success.
-    Raises HTTPException(500) if no free discriminator is found after 10 attempts.
     """
-    for _attempt in range(10):
-        discriminator = f"{random.randint(0, 9999):04d}"
-
-        # Check if this username#discriminator combo is taken
+    candidates = [desired_disc] if desired_disc else [f"{random.randint(0, 9999):04d}" for _ in range(10)]
+    for discriminator in candidates:
         existing = (
             svc_client.table("user")
             .select("id")
@@ -58,22 +54,24 @@ def _assign_username(svc_client, user_id: str, username: str) -> str:
             .eq("discriminator", discriminator)
             .execute()
         )
-
         if existing.data:
-            continue  # Collision, try another discriminator
+            continue  # taken
 
-        # Assign username + discriminator
         result = (
             svc_client.table("user")
             .update({"username": username, "discriminator": discriminator})
             .eq("id", user_id)
             .execute()
         )
-
         if result.data:
             logger.info(f"Username assigned: {user_id} -> {username}#{discriminator}")
             return discriminator
 
+    if desired_disc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{username}#{desired_disc} is already taken",
+        )
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail="Failed to assign username after multiple attempts",
@@ -276,7 +274,7 @@ async def set_username(
             detail="Username already set",
         )
 
-    discriminator = _assign_username(svc_client, current_user.id, body.username)
+    discriminator = _assign_username(svc_client, current_user.id, body.username, body.discriminator)
     return UserResponse(
         id=current_user.id,
         email=current_user.email,
@@ -300,7 +298,7 @@ async def change_username(
     """
     svc_client = get_supabase_client()
 
-    discriminator = _assign_username(svc_client, current_user.id, body.username)
+    discriminator = _assign_username(svc_client, current_user.id, body.username, body.discriminator)
     return UserResponse(
         id=current_user.id,
         email=current_user.email,

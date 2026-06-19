@@ -60,6 +60,11 @@ class SetUsernameRequest(BaseModel):
         description="Lowercase alphanumeric username, 3-20 characters",
         examples=["leonhuber"],
     )
+    discriminator: str | None = Field(
+        default=None,
+        pattern=r"^\d{4}$",
+        description="Optional desired 4-digit discriminator; random if omitted",
+    )
 
 
 class ChangeUsernameRequest(BaseModel):
@@ -72,6 +77,11 @@ class ChangeUsernameRequest(BaseModel):
         pattern=r"^[a-z0-9]+$",
         description="Lowercase alphanumeric username, 3-20 characters",
         examples=["leonhuber"],
+    )
+    discriminator: str | None = Field(
+        default=None,
+        pattern=r"^\d{4}$",
+        description="Optional desired 4-digit discriminator; random if omitted",
     )
 
 

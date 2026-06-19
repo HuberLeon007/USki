@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/app/auth-context";
 import {
-  changeUsername,
+  changeUsernameFull,
   checkUsername,
   getMe,
   ApiError,
@@ -46,6 +46,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   // without depending on a context refresh round-trip.
   const [currentUser, setCurrentUser] = useState<UserResponse | null>(user);
   const [username, setUsernameValue] = useState("");
+  const [disc, setDisc] = useState("");
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(false);
   const [available, setAvailable] = useState<boolean | null>(null);
@@ -59,6 +60,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     if (open) {
       setCurrentUser(user);
       setUsernameValue(user?.username ?? "");
+      setDisc(user?.discriminator ?? "");
       setAvailable(null);
       setError(null);
       setSuccess(false);
@@ -102,7 +104,14 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       setError("Username must be 3–20 lowercase letters or numbers.");
       return;
     }
-    if (username === (currentUser?.username ?? "")) {
+    const discValid = /^\d{4}$/.test(disc);
+    const usernameUnchanged = username === (currentUser?.username ?? "");
+    const discUnchanged = disc === (currentUser?.discriminator ?? "");
+    if (usernameUnchanged && discUnchanged) {
+      return;
+    }
+    if (disc && !discValid) {
+      setError("Discriminator must be exactly 4 digits.");
       return;
     }
     if (available === false) {
@@ -113,7 +122,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     setError(null);
     try {
       // R9.4: update and read back the new username/discriminator.
-      const updated = await changeUsername(username);
+      const updated = await changeUsernameFull(username, discValid ? disc : undefined);
       // Prefer the freshest server state; fall back to the PATCH payload.
       let next = updated;
       try {
@@ -123,6 +132,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       }
       setCurrentUser(next);
       setUsernameValue(next.username ?? username);
+      setDisc(next.discriminator ?? "");
       setNeedsUsername(false);
       setAvailable(null);
       setSuccess(true); // R9.5: surface the updated value.
@@ -150,7 +160,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   }
 
   const handle = formatHandle(currentUser);
-  const unchanged = username === (currentUser?.username ?? "");
+  const unchanged = username === (currentUser?.username ?? "") && disc === (currentUser?.discriminator ?? "");
   const valid = isValidUsername(username);
   const canSubmit = valid && !unchanged && available !== false && !loading;
   const isDark = theme === "dark";
@@ -206,6 +216,22 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 ? "Already taken — try another."
                 : "3–20 characters · lowercase letters and numbers"}
             </p>
+
+            <div className="flex items-center gap-2">
+              <Label htmlFor="settings-disc" className="text-xs text-muted-foreground">
+                Discriminator (optional, 4 digits)
+              </Label>
+              <input
+                id="settings-disc"
+                inputMode="numeric"
+                value={disc}
+                onChange={(e) => { setDisc(e.target.value.replace(/\D/g, "").slice(0, 4)); setError(null); setSuccess(false); }}
+                placeholder="0427"
+                className="h-9 w-20 rounded-lg border border-input bg-background/60 px-2 text-center font-mono text-sm outline-none focus-visible:border-primary/60 focus-visible:ring-4 focus-visible:ring-primary/15"
+                maxLength={4}
+                disabled={loading}
+              />
+            </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
             {success && !error && (

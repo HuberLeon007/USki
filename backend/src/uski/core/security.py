@@ -66,13 +66,12 @@ def get_current_user(
 
     try:
         signing_key = _get_signing_key(token)
-        issuer = f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1"
         payload = jwt.decode(
             token,
             signing_key,
-            algorithms=["RS256"],
+            algorithms=["RS256", "ES256"],
             audience="authenticated",
-            issuer=issuer,
+            options={"verify_iss": False},
         )
     except JWTError as exc:
         raise HTTPException(
@@ -85,6 +84,21 @@ def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Authentication service temporarily unavailable",
+        )
+
+    # Validate issuer against the allow-list (browser URL may differ from the
+    # backend's internal SUPABASE_URL in dev — see Settings.allowed_issuers).
+    token_iss = payload.get("iss")
+    if token_iss not in settings.allowed_issuers:
+        logger.warning(
+            "Token issuer {} not in allowed issuers {}",
+            token_iss,
+            settings.allowed_issuers,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     user_id: str | None = payload.get("sub")

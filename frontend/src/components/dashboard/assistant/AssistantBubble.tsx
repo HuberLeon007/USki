@@ -2,6 +2,7 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { sendChat } from "@/lib/api";
 import { AssistantWindow, type AssistantConversation } from "./AssistantWindow";
 
 /** The three states of the AI assistant surface (R17). */
@@ -26,11 +27,11 @@ export function AssistantBubble({ className }: AssistantBubbleProps) {
   const [state, setState] = useState<AssistantState>("closed");
 
   // Conversation/draft lifted above the window so closing/reopening retains it (R17.6).
-  // UI-only/preview for now — no backend.
   const [conversation, setConversation] = useState<AssistantConversation>({
     messages: [],
     draft: "",
   });
+  const [sending, setSending] = useState(false);
 
   const open = () => setState("small");
   const close = () => setState("closed");
@@ -39,6 +40,29 @@ export function AssistantBubble({ className }: AssistantBubbleProps) {
 
   const setDraft = (draft: string) =>
     setConversation((prev) => ({ ...prev, draft }));
+
+  const send = async () => {
+    const text = conversation.draft.trim();
+    if (!text || sending) return;
+    const id = () => Math.random().toString(36).slice(2);
+    const history = [...conversation.messages, { id: id(), role: "user" as const, content: text }];
+    setConversation({ messages: history, draft: "" });
+    setSending(true);
+    try {
+      const res = await sendChat(history.map((m) => ({ role: m.role, content: m.content })));
+      setConversation((c) => ({
+        ...c,
+        messages: [...c.messages, { id: id(), role: "assistant", content: res.message.content }],
+      }));
+    } catch {
+      setConversation((c) => ({
+        ...c,
+        messages: [...c.messages, { id: id(), role: "assistant", content: "The assistant is unavailable right now." }],
+      }));
+    } finally {
+      setSending(false);
+    }
+  };
 
   return (
     <>
@@ -51,6 +75,8 @@ export function AssistantBubble({ className }: AssistantBubbleProps) {
             onDraftChange={setDraft}
             onToggleMaximize={toggleMaximize}
             onClose={close}
+            onSend={send}
+            sending={sending}
           />
         )}
       </AnimatePresence>

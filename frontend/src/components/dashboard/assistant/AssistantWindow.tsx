@@ -29,6 +29,10 @@ interface AssistantWindowProps {
   onToggleMaximize: () => void;
   /** Close the window and return to the bubble (R17.6). */
   onClose: () => void;
+  /** Send the current draft as a chat message. */
+  onSend?: () => void;
+  /** Whether a chat request is in flight. */
+  sending?: boolean;
 }
 
 const SUGGESTIONS = [
@@ -56,6 +60,8 @@ export function AssistantWindow({
   onDraftChange,
   onToggleMaximize,
   onClose,
+  onSend,
+  sending = false,
 }: AssistantWindowProps) {
   const maximized = state === "maximized";
 
@@ -310,16 +316,23 @@ export function AssistantWindow({
             rows={1}
             value={conversation.draft}
             onChange={(e) => onDraftChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (conversation.draft.trim() && !sending) onSend?.();
+              }
+            }}
             placeholder="Message the assistant…"
             className="max-h-32 flex-1 resize-none bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground/70"
           />
           <Button
             size="icon"
+            onClick={() => onSend?.()}
             className={cn(
               "h-9 w-9 shrink-0 rounded-xl transition-opacity",
-              !conversation.draft.trim() && "opacity-40",
+              (!conversation.draft.trim() || sending) && "opacity-40",
             )}
-            disabled={!conversation.draft.trim()}
+            disabled={!conversation.draft.trim() || sending}
             aria-label="Send"
           >
             <ArrowUp className="h-4 w-4" />

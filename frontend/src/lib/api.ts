@@ -272,3 +272,140 @@ export function deriveUsernameFromEmail(email: string): string {
 
   return cleaned;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Decks, groups, cards, review, sharing, notifications
+// Single data seam: components call these, never `fetch` directly.
+// ─────────────────────────────────────────────────────────────
+
+export interface Deck {
+  id: string;
+  owner_id: string;
+  group_id: string | null;
+  title: string;
+  description: string;
+  card_template: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DeckGroup {
+  id: string;
+  owner_id: string;
+  parent_group_id: string | null;
+  name: string;
+  position: number;
+}
+
+export interface Card {
+  id: string;
+  deck_id: string;
+  front_json: Record<string, unknown>;
+  front_html: string;
+  back_json: Record<string, unknown>;
+  back_html: string;
+  position: number;
+}
+
+export type ReviewRating = "again" | "hard" | "good" | "easy";
+export type Permission = "read" | "edit" | "share";
+
+export interface Share {
+  deck_id: string;
+  grantee_id: string;
+  permission: Permission;
+}
+
+export interface Notification {
+  id: string;
+  deck_id: string | null;
+  kind: string;
+  message: string;
+  seen: boolean;
+}
+
+const authed = { requireAuth: true } as const;
+
+// decks
+export const listDecks = () => apiFetch<Deck[]>("/decks", {}, authed);
+export const listSharedDecks = () => apiFetch<Deck[]>("/decks/shared", {}, authed);
+export const getDeck = (id: string) => apiFetch<Deck>(`/decks/${id}`, {}, authed);
+export const createDeck = (data: { title: string; description?: string; group_id?: string | null }) =>
+  apiFetch<Deck>("/decks", { method: "POST", body: JSON.stringify(data) }, authed);
+export const updateDeck = (id: string, patch: Partial<Pick<Deck, "title" | "description" | "group_id">>) =>
+  apiFetch<Deck>(`/decks/${id}`, { method: "PATCH", body: JSON.stringify(patch) }, authed);
+export const deleteDeck = (id: string) =>
+  apiFetch<void>(`/decks/${id}`, { method: "DELETE" }, authed);
+
+// groups
+export const listGroups = () => apiFetch<DeckGroup[]>("/groups", {}, authed);
+export const createGroup = (data: { name: string; parent_group_id?: string | null }) =>
+  apiFetch<DeckGroup>("/groups", { method: "POST", body: JSON.stringify(data) }, authed);
+export const deleteGroup = (id: string) =>
+  apiFetch<void>(`/groups/${id}`, { method: "DELETE" }, authed);
+
+// cards
+export const listCards = (deckId: string) =>
+  apiFetch<Card[]>(`/decks/${deckId}/cards`, {}, authed);
+export const createCard = (
+  deckId: string,
+  data: { front_json?: object; front_html: string; back_json?: object; back_html: string },
+) => apiFetch<Card>(`/decks/${deckId}/cards`, { method: "POST", body: JSON.stringify(data) }, authed);
+export const updateCard = (deckId: string, cardId: string, patch: Partial<Card>) =>
+  apiFetch<Card>(`/decks/${deckId}/cards/${cardId}`, { method: "PATCH", body: JSON.stringify(patch) }, authed);
+export const deleteCard = (deckId: string, cardId: string) =>
+  apiFetch<void>(`/decks/${deckId}/cards/${cardId}`, { method: "DELETE" }, authed);
+
+// review
+export const dueCards = (deckId: string) =>
+  apiFetch<Card[]>(`/decks/${deckId}/review/due`, {}, authed);
+export const rateCard = (deckId: string, cardId: string, rating: ReviewRating) =>
+  apiFetch<{ card_id: string; due: string; state: number }>(
+    `/decks/${deckId}/review/${cardId}`,
+    { method: "POST", body: JSON.stringify({ rating }) },
+    authed,
+  );
+
+// sharing
+export const listShares = (deckId: string) =>
+  apiFetch<Share[]>(`/decks/${deckId}/shares`, {}, authed);
+export const grantShare = (
+  deckId: string,
+  data: { username: string; discriminator: string; permission: Permission },
+) => apiFetch<Share>(`/decks/${deckId}/shares`, { method: "POST", body: JSON.stringify(data) }, authed);
+export const revokeShare = (deckId: string, granteeId: string) =>
+  apiFetch<void>(`/decks/${deckId}/shares/${granteeId}`, { method: "DELETE" }, authed);
+export const createInvite = (deckId: string, permission: Permission) =>
+  apiFetch<{ code: string; deck_id: string; permission: Permission }>(
+    `/decks/${deckId}/invites`,
+    { method: "POST", body: JSON.stringify({ permission }) },
+    authed,
+  );
+export const redeemInvite = (code: string) =>
+  apiFetch<Share>("/shares/redeem", { method: "POST", body: JSON.stringify({ code }) }, authed);
+
+// notifications
+export const listNotifications = () =>
+  apiFetch<Notification[]>("/notifications", {}, authed);
+export const markNotificationsSeen = (ids: string[]) =>
+  apiFetch<void>("/notifications/seen", { method: "POST", body: JSON.stringify({ ids }) }, authed);
+
+// settings: change username (optional custom discriminator)
+export const changeUsernameFull = (username: string, discriminator?: string) =>
+  apiFetch<UserResponse>(
+    "/auth/username",
+    { method: "PATCH", body: JSON.stringify({ username, discriminator }) },
+    authed,
+  );
+
+// chat (RAG when deckId is given)
+export interface ChatApiMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+export const sendChat = (messages: ChatApiMessage[], deckId?: string | null) =>
+  apiFetch<{ message: ChatApiMessage; model: string }>(
+    "/chat",
+    { method: "POST", body: JSON.stringify({ messages, deck_id: deckId ?? null }) },
+    authed,
+  );

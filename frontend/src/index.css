@@ -121,3 +121,17 @@
     }
   }
 }
+
+/* Card rich-text rendering (TipTap output + read-only view) */
+.prose-card { line-height: 1.6; }
+.prose-card :where(p) { margin: 0.25rem 0; }
+.prose-card :where(h2) { font-size: 1.25rem; font-weight: 700; margin: 0.6rem 0 0.3rem; }
+.prose-card :where(h3) { font-size: 1.05rem; font-weight: 600; margin: 0.5rem 0 0.25rem; }
+.prose-card :where(strong) { font-weight: 700; }
+.prose-card :where(em) { font-style: italic; }
+.prose-card :where(ul) { list-style: disc; padding-left: 1.25rem; margin: 0.25rem 0; }
+.prose-card :where(ol) { list-style: decimal; padding-left: 1.25rem; margin: 0.25rem 0; }
+.prose-card :where(code) { font-family: var(--font-mono, monospace); font-size: 0.9em; }
+.prose-card :where(pre) { background: var(--color-muted); border-radius: 0.5rem; padding: 0.6rem 0.8rem; overflow-x: auto; }
+.prose-card :where(blockquote) { border-left: 3px solid var(--color-border); padding-left: 0.75rem; color: var(--color-muted-foreground); }
+.prose-card:empty::before { content: ""; }

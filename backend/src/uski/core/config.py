@@ -11,6 +11,11 @@ class Settings(BaseSettings):
 
     # Supabase
     SUPABASE_URL: str
+    # Browser-facing Supabase URL (the `iss` the client token carries). In dev,
+    # the browser talks to 127.0.0.1 while the backend container reaches Supabase
+    # via host.docker.internal, so the token issuer differs from SUPABASE_URL.
+    # Empty -> falls back to SUPABASE_URL.
+    SUPABASE_PUBLIC_URL: str = ""
     SUPABASE_ANON_KEY: str
     SUPABASE_SERVICE_ROLE_KEY: str
 
@@ -38,6 +43,26 @@ class Settings(BaseSettings):
     def jwks_url(self) -> str:
         """Supabase JWKS endpoint for RS256 JWT validation."""
         return f"{self.SUPABASE_URL.rstrip('/')}/auth/v1/.well-known/jwks.json"
+
+    @property
+    def allowed_issuers(self) -> set[str]:
+        """Accepted `iss` claims for incoming tokens.
+
+        The token issuer is whatever GoTrue is configured with (browser-facing
+        URL). We accept both the internal SUPABASE_URL and the public URL, plus
+        common localhost variants in dev, so a token minted at 127.0.0.1 still
+        validates in a container that reaches Supabase via host.docker.internal.
+        """
+        bases = {self.SUPABASE_URL}
+        if self.SUPABASE_PUBLIC_URL:
+            bases.add(self.SUPABASE_PUBLIC_URL)
+        if self.is_dev:
+            bases |= {
+                "http://127.0.0.1:54321",
+                "http://localhost:54321",
+                "http://host.docker.internal:54321",
+            }
+        return {f"{b.rstrip('/')}/auth/v1" for b in bases}
 
     @property
     def is_dev(self) -> bool:

@@ -19,10 +19,13 @@ dependencies = [
     "openai>=2.41.1",
     "slowapi>=0.1.9",
     "redis>=8.0.0",
+    "nh3>=0.2.18",
+    "fsrs>=6.0.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=9.0.3",
     "httpx>=0.28.0",
+    "hypothesis>=6.0.0",
 ]

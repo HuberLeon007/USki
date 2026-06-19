@@ -83,7 +83,7 @@ export function HeroDemo(): JSX.Element {
           </span>
         </div>
 
-        <div className="flex h-[24rem] min-h-0">
+        <div className="flex h-[28rem] min-h-0 md:h-[32rem]">
           {/* ── Left sidebar (R3.1) ───────────────────────── */}
           <aside className="hidden w-48 shrink-0 flex-col border-r border-border/50 bg-card/60 sm:flex">
             <div className="flex h-12 items-center gap-2 px-4">
