@@ -90,7 +90,7 @@ export function Sidebar({
         {/* Nav — fixed top-level items only (no badges, no search). */}
         <nav className="flex-1 space-y-1 px-3 py-2" style={{ scrollbarGutter: "stable" }}>
           <NavItem icon={LayoutDashboard} label="Overview" collapsed={collapsed} active={view === "overview"} onClick={() => onSelectView("overview")} />
-          <NavItem icon={Layers} label="Decks" collapsed={collapsed} active={view === "decks"} onClick={() => onSelectView("decks")} />
+          <NavItem icon={Layers} label="Decks" collapsed={collapsed} active={view === "decks"} onClick={() => onSelectView("decks")} dataTour="nav-decks" />
           <NavItem icon={FolderSearch} label="Browse" collapsed={collapsed} active={view === "browse"} onClick={() => onSelectView("browse")} />
           <NavItem icon={Users} label="Shared" collapsed={collapsed} active={view === "shared"} onClick={() => onSelectView("shared")} />
         </nav>
@@ -100,6 +100,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={onOpenSettings}
+            data-tour="settings"
             title={collapsed ? (displayName ?? "Account") : "Open settings"}
             aria-label="Open settings"
             className="group flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-accent/60"
@@ -133,12 +134,14 @@ interface NavItemProps {
   collapsed: boolean;
   active: boolean;
   onClick: () => void;
+  dataTour?: string;
 }
 
-function NavItem({ icon: Icon, label, collapsed, active, onClick }: NavItemProps) {
+function NavItem({ icon: Icon, label, collapsed, active, onClick, dataTour }: NavItemProps) {
   return (
     <button
       onClick={onClick}
+      data-tour={dataTour}
       title={collapsed ? label : undefined}
       className={cn(
         "group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",

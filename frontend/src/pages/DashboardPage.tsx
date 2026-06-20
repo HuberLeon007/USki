@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sidebar, type DashboardView } from "@/components/dashboard/Sidebar";
+import { GuidedTour, type TourStep } from "@/components/dashboard/GuidedTour";
 import { AssistantBubble } from "@/components/dashboard/assistant/AssistantBubble";
 import { OnboardingStep } from "@/components/auth/OnboardingStep";
 import { NewDeckDialog } from "@/components/decks/NewDeckDialog";
@@ -38,6 +39,8 @@ export default function DashboardPage() {
   // but stays visible for the session; it never returns in a later session.
   const [showWelcome, setShowWelcome] = useState(false);
   const [welcomeSeen, setWelcomeSeen] = useState(false);
+  // Interactive product tour, shown once after the username step is done.
+  const [tourOpen, setTourOpen] = useState(false);
   const redeemedRef = useRef<Set<string>>(new Set());
 
   const [view, setView] = useState<DashboardView>(() => {
@@ -133,6 +136,63 @@ export default function DashboardPage() {
       if (!localStorage.getItem(`uski.welcomed.${uid}`)) setShowWelcome(true);
     } catch { /* ignore */ }
   }, [uid]);
+
+  // Run the guided product tour once, after the username step is complete so its
+  // dialog never overlaps the tour. A "Replay tour" control in Settings clears
+  // the flag to show it again.
+  useEffect(() => {
+    if (uid === "anon" || needsUsername) return;
+    let seen = true;
+    try { seen = Boolean(localStorage.getItem(`uski.tour.done.${uid}`)); } catch { /* ignore */ }
+    if (seen) return;
+    const t = setTimeout(() => setTourOpen(true), 700);
+    return () => clearTimeout(t);
+  }, [uid, needsUsername]);
+
+  const tourSteps: TourStep[] = [
+    {
+      title: "Welcome to USki",
+      body: "Here's a quick tour of the essentials. You can skip anytime.",
+      target: null,
+    },
+    {
+      title: "Your decks",
+      body: "Open Decks to create, organize, and study your flashcard sets.",
+      target: '[data-tour="nav-decks"]',
+      onEnter: () => setView("overview"),
+    },
+    {
+      title: "Create a deck",
+      body: "Hit New deck to build your first set of cards.",
+      target: '[data-tour="new-deck"]',
+      onEnter: () => setView("decks"),
+    },
+    {
+      title: "Notifications",
+      body: "Activity and updates show up here at the bell.",
+      target: '[data-tour="bell"]',
+    },
+    {
+      title: "Settings",
+      body: "Your username, theme, two-factor login, and the AI assistant all live here.",
+      target: '[data-tour="settings"]',
+    },
+    {
+      title: "You're all set",
+      body: "That's the tour. Create your first deck and start learning.",
+      target: null,
+    },
+  ];
+
+  function endTour() {
+    try { localStorage.setItem(`uski.tour.done.${uid}`, "1"); } catch { /* ignore */ }
+    setTourOpen(false);
+  }
+  function finishTour() {
+    endTour();
+    setView("decks");
+    setNewDeckGroup(null);
+  }
 
   const welcomeNotification: Notification = {
     id: "welcome",
@@ -260,7 +320,7 @@ export default function DashboardPage() {
               <Button variant="outline" size="sm" className="gap-1.5 rounded-lg" onClick={() => setCreatingFolder(true)}>
                 <FolderPlus className="h-4 w-4" /> <span className="hidden sm:inline">New folder</span>
               </Button>
-              <Button size="sm" className="gap-1.5 rounded-lg font-semibold" onClick={() => setNewDeckGroup(null)}>
+              <Button size="sm" className="gap-1.5 rounded-lg font-semibold" onClick={() => setNewDeckGroup(null)} data-tour="new-deck">
                 <Plus className="h-4 w-4" /> New deck
               </Button>
             </>
@@ -369,6 +429,9 @@ export default function DashboardPage() {
       </div>
 
       <AssistantBubble dueContext={dueContext} onReservedWidthChange={setAssistantReserved} />
+      {tourOpen && (
+        <GuidedTour steps={tourSteps} onClose={endTour} onFinish={finishTour} finishLabel="Create a deck" />
+      )}
       <OnboardingStep open={showUsernameDialog} onOpenChange={setShowUsernameDialog} />
       <NewDeckDialog
         open={newDeckGroup !== undefined}
@@ -886,6 +949,7 @@ function NotificationBell({ notifications, onOpen }: { notifications: Notificati
     <div className="relative">
       <button
         type="button"
+        data-tour="bell"
         onClick={() => { const next = !open; setOpen(next); if (next) onOpen(); }}
         aria-label={unread ? `${unread} new notifications` : "Notifications"}
         className="relative flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"

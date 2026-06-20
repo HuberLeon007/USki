@@ -15,6 +15,7 @@ import {
   Palette,
   ShieldCheck,
   Sparkles,
+  Compass,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -147,6 +148,7 @@ function AccountPanel({
   endSession: () => void;
 }) {
   const { setNeedsUsername } = useAuth();
+  const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState<UserResponse | null>(user);
   const [username, setUsernameValue] = useState(user?.username ?? "");
   const [disc, setDisc] = useState(user?.discriminator ?? "");
@@ -342,6 +344,21 @@ function AccountPanel({
           onClick={endSession}
         >
           <LogOut className="h-4 w-4" /> Log out
+        </Button>
+      </Section>
+
+      <Section title="Product tour" description="Replay the guided walkthrough of the app.">
+        <Button
+          type="button"
+          variant="outline"
+          className="h-10 gap-2 rounded-xl"
+          onClick={() => {
+            const uid = user?.id ?? "anon";
+            try { localStorage.removeItem(`uski.tour.done.${uid}`); } catch { /* ignore */ }
+            navigate("/dashboard");
+          }}
+        >
+          <Compass className="h-4 w-4" /> Replay tour
         </Button>
       </Section>
     </div>
