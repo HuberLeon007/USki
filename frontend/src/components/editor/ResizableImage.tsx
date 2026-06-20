@@ -29,6 +29,14 @@ import { cn } from "@/lib/utils";
 const MIN_WIDTH = 48; // px, smallest a full image may be dragged down to
 
 type ImageDisplay = "full" | "pictogram";
+type Corner = "nw" | "ne" | "sw" | "se";
+
+const CORNERS: { corner: Corner; pos: string; cursor: string }[] = [
+  { corner: "nw", pos: "-left-1 -top-1", cursor: "cursor-nwse-resize" },
+  { corner: "ne", pos: "-right-1 -top-1", cursor: "cursor-nesw-resize" },
+  { corner: "sw", pos: "-bottom-1 -left-1", cursor: "cursor-nesw-resize" },
+  { corner: "se", pos: "-bottom-1 -right-1", cursor: "cursor-nwse-resize" },
+];
 
 function ResizableImageView({ node, updateAttributes, selected, editor }: NodeViewProps) {
   const src = node.attrs.src as string;
@@ -43,40 +51,45 @@ function ResizableImageView({ node, updateAttributes, selected, editor }: NodeVi
   const imgRef = useRef<HTMLImageElement>(null);
   const [resizing, setResizing] = useState(false);
 
-  // Drag the corner handle to scale width. Height follows from height:auto,
-  // so the aspect ratio is locked. Width is capped to the natural size and the
-  // editor content width so the image never upscales or overflows the field.
-  const startResize = useCallback((event: ReactPointerEvent<HTMLSpanElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const img = imgRef.current;
-    if (!img) return;
+  // Drag any corner handle to scale width; height follows from height:auto so
+  // the aspect ratio stays locked. Left-side corners grow the image when dragged
+  // outward (leftward), right-side corners when dragged rightward. Width may grow
+  // up to the editor content width (small images can be enlarged) and shrink to
+  // MIN_WIDTH.
+  const startResize = useCallback(
+    (event: ReactPointerEvent<HTMLSpanElement>, corner: Corner) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const img = imgRef.current;
+      if (!img) return;
 
-    const startX = event.clientX;
-    const startWidth = img.offsetWidth;
-    const natural = img.naturalWidth || startWidth;
-    const contentWidth =
-      (img.closest(".ProseMirror") as HTMLElement | null)?.clientWidth ?? natural;
-    const cap = Math.min(natural || contentWidth, contentWidth || natural);
+      const startX = event.clientX;
+      const startWidth = img.offsetWidth;
+      const contentWidth =
+        (img.closest(".ProseMirror") as HTMLElement | null)?.clientWidth ?? startWidth;
+      const cap = Math.max(contentWidth, startWidth);
+      const growsLeft = corner === "nw" || corner === "sw";
 
-    setResizing(true);
+      setResizing(true);
 
-    const onMove = (e: PointerEvent) => {
-      const next = Math.round(
-        Math.max(MIN_WIDTH, Math.min(startWidth + (e.clientX - startX), cap)),
-      );
-      updateAttributes({ width: next });
-    };
-    const onUp = () => {
-      setResizing(false);
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-  }, [updateAttributes]);
+      const onMove = (e: PointerEvent) => {
+        const dx = e.clientX - startX;
+        const delta = growsLeft ? -dx : dx;
+        const next = Math.round(Math.max(MIN_WIDTH, Math.min(startWidth + delta, cap)));
+        updateAttributes({ width: next });
+      };
+      const onUp = () => {
+        setResizing(false);
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    },
+    [updateAttributes],
+  );
 
-  // Double-click toggles between full and the compact 64x64 pictogram.
+  // Double-click toggles between full and the compact pictogram thumbnail.
   const toggleDisplay = useCallback(() => {
     updateAttributes({ display: isPictogram ? "full" : "pictogram" });
   }, [isPictogram, updateAttributes]);
@@ -99,24 +112,27 @@ function ResizableImageView({ node, updateAttributes, selected, editor }: NodeVi
         style={!isPictogram && width ? { width: `${width}px` } : undefined}
         className={cn(
           "block max-w-full cursor-grab rounded-lg",
-          isPictogram ? "h-16 w-16 object-cover" : "h-auto",
+          isPictogram ? "h-28 w-28 object-cover" : "h-auto",
           selected && "ring-2 ring-primary/60",
         )}
       />
-      {editable && !isPictogram && (
-        <span
-          role="presentation"
-          aria-hidden="true"
-          onPointerDown={startResize}
-          style={{ touchAction: "none" }}
-          className={cn(
-            "absolute -bottom-1 -right-1 h-3.5 w-3.5 cursor-nwse-resize rounded-full",
-            "border border-background bg-primary shadow",
-            "opacity-0 transition-opacity group-hover:opacity-100",
-            selected && "opacity-100",
-          )}
-        />
-      )}
+      {editable && !isPictogram &&
+        CORNERS.map(({ corner, pos, cursor }) => (
+          <span
+            key={corner}
+            role="presentation"
+            aria-hidden="true"
+            onPointerDown={(e) => startResize(e, corner)}
+            style={{ touchAction: "none" }}
+            className={cn(
+              "absolute h-3.5 w-3.5 rounded-full border border-background bg-primary shadow",
+              "opacity-0 transition-opacity group-hover:opacity-100",
+              pos,
+              cursor,
+              selected && "opacity-100",
+            )}
+          />
+        ))}
     </NodeViewWrapper>
   );
 }

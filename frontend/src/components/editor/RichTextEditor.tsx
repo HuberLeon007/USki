@@ -179,8 +179,17 @@ export function RichTextField({ value, onChange, placeholder, ariaLabel }: RichT
 
   useEffect(() => { editorRef.current = editor; }, [editor]);
 
+  // Sync external value changes into the editor ONLY when this field is not
+  // focused. Once an image is inserted, getHTML() and the re-parsed value no
+  // longer round-trip byte-for-byte, so the old unconditional check fired
+  // setContent on every keystroke, resetting the cursor and dropping each typed
+  // character onto its own line. Guarding on focus makes the editor behave like
+  // a proper controlled component: external resets apply, live typing doesn't
+  // fight itself.
   useEffect(() => {
-    if (editor && value !== editor.getHTML()) editor.commands.setContent(value);
+    if (editor && !editor.isFocused && value !== editor.getHTML()) {
+      editor.commands.setContent(value, false);
+    }
   }, [value, editor]);
 
   // Clear shared "active" when this field unmounts while focused.

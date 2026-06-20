@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { Cookie, X } from "lucide-react";
 
-const CONSENT_KEY = "uski.cookie.consent";
+const CONSENT_KEY = "uski.cookie.consent.v2";
 
 function hasConsented(): boolean {
   try {

@@ -845,7 +845,9 @@ function Confetti() {
  *  joined your shared deck). Marks them seen when opened. */
 function NotificationBell({ notifications, onOpen }: { notifications: Notification[]; onOpen: () => void }) {
   const [open, setOpen] = useState(false);
+  const reduce = useReducedMotion();
   const unread = notifications.filter((n) => !n.seen).length;
+  const wobble = unread > 0 && !open;
   return (
     <div className="relative">
       <button
@@ -854,7 +856,23 @@ function NotificationBell({ notifications, onOpen }: { notifications: Notificati
         aria-label={unread ? `${unread} new notifications` : "Notifications"}
         className="relative flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
-        <Bell className="h-5 w-5" />
+        {/* The bell physically swings while there are unread items, pivoting from
+            the top like a real bell, then rests. Stops once opened / read. */}
+        <motion.span
+          className="inline-flex origin-top"
+          animate={
+            wobble && !reduce
+              ? { rotate: [0, -14, 11, -8, 6, -3, 0] }
+              : { rotate: 0 }
+          }
+          transition={
+            wobble && !reduce
+              ? { duration: 0.9, ease: "easeInOut", repeat: Infinity, repeatDelay: 2.4 }
+              : { duration: 0.2 }
+          }
+        >
+          <Bell className="h-5 w-5" />
+        </motion.span>
         {unread > 0 && (
           <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
             {unread > 9 ? "9+" : unread}

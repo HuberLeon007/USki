@@ -23,6 +23,7 @@ import {
   DECK_ICON_KEYS, deckIconFor, DECK_COLOR_KEYS, deckColorFor, DeckBadge,
 } from "@/lib/deck-icons";
 import {
+  ApiError,
   listCards, createCard, updateCard, deleteCard, deleteDeck, getDeck, updateDeck, listGroups, reorderCards,
   setBidirectional, resetProgress, reviewStats, type Card, type Deck, type DeckGroup, type ReviewStats,
 } from "@/lib/api";
@@ -666,14 +667,22 @@ function DeckSettings({
   }
 
   async function confirmDelete() {
-    if (confirmText !== deck.title) return;
+    if (confirmText !== deck.title || deleting) return;
     setDeleting(true);
     try {
       await deleteDeck(deck.id);
-      onDeleted();
-    } finally {
-      setDeleting(false);
+    } catch (err) {
+      // A 404 means the deck is already gone (e.g. a double submit) -> treat as
+      // success and leave. Any other failure is surfaced and the dialog stays
+      // open so the user can retry, instead of an uncaught promise rejection.
+      if (!(err instanceof ApiError && err.status === 404)) {
+        toast.error("Could not delete the deck. Please try again.");
+        setDeleting(false);
+        return;
+      }
     }
+    toast.success("Deck deleted.");
+    onDeleted();
   }
 
   return (
