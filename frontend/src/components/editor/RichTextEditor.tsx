@@ -55,7 +55,10 @@ async function uploadAndInsert(editor: Editor | null, file: File) {
   if (!editor) return;
   try {
     const { url } = await uploadImage(file);
-    editor.chain().focus().setImage({ src: url }).run();
+    // Insert the image, then drop the caret into a fresh paragraph right after
+    // it. Without this the block image stays node-selected, so the next typed
+    // characters would each be redirected after the image (one char per line).
+    editor.chain().focus().setImage({ src: url }).createParagraphNear().run();
   } catch (err) {
     toast.error(err instanceof ApiError ? err.message : "Image upload failed");
   }
@@ -128,6 +131,10 @@ export function RichTextToolbar() {
 export function RichTextField({ value, onChange, placeholder, ariaLabel }: RichTextFieldProps) {
   const { active, setActive } = useRichCtx();
   const editorRef = useRef<Editor | null>(null);
+  // The last HTML this field emitted via onChange. Used to distinguish our own
+  // echoes (which must NOT be pushed back in) from genuine external value
+  // changes (draft load, editing an existing card, clearing).
+  const lastEmittedRef = useRef(value);
 
   const editor = useEditor({
     extensions: [
@@ -139,7 +146,11 @@ export function RichTextField({ value, onChange, placeholder, ariaLabel }: RichT
       Placeholder.configure({ placeholder: placeholder ?? "Write…" }),
     ],
     content: value,
-    onUpdate: ({ editor }) => onChange(editor.getHTML()),
+    onUpdate: ({ editor }) => {
+      const html = editor.getHTML();
+      lastEmittedRef.current = html;
+      onChange(html);
+    },
     onFocus: ({ editor }) => setActive(editor),
     editorProps: {
       attributes: {
@@ -163,33 +174,24 @@ export function RichTextField({ value, onChange, placeholder, ariaLabel }: RichT
         files.forEach((f) => uploadAndInsert(editorRef.current, f));
         return true;
       },
-      // Guard: typing while an image node is selected must NOT replace/delete it.
-      // Instead, insert the text right after the image and keep the picture.
-      handleTextInput: (view, _from, _to, text) => {
-        const sel = view.state.selection as unknown as { node?: { type: { name: string } }; to: number };
-        if (sel.node && sel.node.type.name === "image") {
-          const pos = sel.to;
-          view.dispatch(view.state.tr.insertText(text, pos));
-          return true;
-        }
-        return false;
-      },
     },
   });
 
   useEffect(() => { editorRef.current = editor; }, [editor]);
 
-  // Sync external value changes into the editor ONLY when this field is not
-  // focused. Once an image is inserted, getHTML() and the re-parsed value no
-  // longer round-trip byte-for-byte, so the old unconditional check fired
-  // setContent on every keystroke, resetting the cursor and dropping each typed
-  // character onto its own line. Guarding on focus makes the editor behave like
-  // a proper controlled component: external resets apply, live typing doesn't
-  // fight itself.
+  // Push value into the editor ONLY for genuine EXTERNAL changes while the field
+  // is not being typed in. The focus guard is the key fix: during live typing the
+  // editor is focused, so we never call setContent (which would reset the cursor
+  // to the start and produce duplicated / reversed characters). The echo guard
+  // additionally ignores re-emissions of our own onUpdate. External loads (open
+  // existing card, clear after save) happen while blurred and apply normally.
   useEffect(() => {
-    if (editor && !editor.isFocused && value !== editor.getHTML()) {
-      editor.commands.setContent(value, false);
-    }
+    if (!editor) return;
+    if (editor.isFocused) return;
+    if (value === lastEmittedRef.current) return;
+    if (value === editor.getHTML()) return;
+    editor.commands.setContent(value, false);
+    lastEmittedRef.current = value;
   }, [value, editor]);
 
   // Clear shared "active" when this field unmounts while focused.

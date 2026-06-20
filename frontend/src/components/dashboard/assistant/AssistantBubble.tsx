@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sendChatStream, type ChatApiMessage } from "@/lib/api";
+import { isAiEnabled, onAiPrefChange } from "@/lib/ai-pref";
 import { useAuth } from "@/app/auth-context";
 import { AssistantWindow, type AssistantConversation, type AssistantMessage, type ChatSummary } from "./AssistantWindow";
 
@@ -78,6 +79,12 @@ export function AssistantBubble({ className, dueContext, deckId, onReservedWidth
   const uid = user?.id ?? "anon";
   const [state, setState] = useState<AssistantState>("closed");
   const [dockWidth, setDockWidth] = useState(440);
+
+  // Respect the per-user "AI off" preference: when disabled, Sero does not
+  // mount anywhere (no bubble, no greeting, no reserved width).
+  const [aiEnabled, setAiEnabledState] = useState<boolean>(() => isAiEnabled(uid));
+  useEffect(() => { setAiEnabledState(isAiEnabled(uid)); }, [uid]);
+  useEffect(() => onAiPrefChange(() => setAiEnabledState(isAiEnabled(uid))), [uid]);
 
   const [conversation, setConversation] = useState<AssistantConversation>({ messages: [], draft: "" });
   const [sending, setSending] = useState(false);
@@ -241,6 +248,13 @@ export function AssistantBubble({ className, dueContext, deckId, onReservedWidth
       onError: () => { setSending(false); setStatus(null); setConversation((c) => ({ ...c, messages: c.messages.map((m) => (m.id === aid ? { ...m, content: fail } : m)) })); },
     });
   };
+
+  // When the assistant is turned off, release any reserved width and close it.
+  useEffect(() => {
+    if (!aiEnabled) { onReservedWidthChange?.(0); setState("closed"); }
+  }, [aiEnabled, onReservedWidthChange]);
+
+  if (!aiEnabled) return null;
 
   return (
     <>

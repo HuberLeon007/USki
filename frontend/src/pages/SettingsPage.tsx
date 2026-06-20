@@ -14,10 +14,12 @@ import {
   User,
   Palette,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/app/auth-context";
+import { isAiEnabled, setAiEnabled } from "@/lib/ai-pref";
 import {
   changeUsernameFull,
   checkUsername,
@@ -31,22 +33,18 @@ import {
 import { cn } from "@/lib/utils";
 
 /** The settings sections, rendered as a left rail (desktop) / top row (mobile). */
-type Tab = "account" | "appearance" | "security";
+type Tab = "account" | "appearance" | "assistant" | "security";
 
 const TABS: { id: Tab; label: string; icon: typeof User }[] = [
   { id: "account", label: "Account", icon: User },
   { id: "appearance", label: "Appearance", icon: Palette },
+  { id: "assistant", label: "Assistant", icon: Sparkles },
   { id: "security", label: "Security", icon: ShieldCheck },
 ];
 
 /** 3-20 lowercase alphanumeric - same rule as onboarding (R9.2). */
 function isValidUsername(value: string): boolean {
   return value.length >= 3 && value.length <= 20 && /^[a-z0-9]+$/.test(value);
-}
-
-function formatHandle(user: UserResponse | null): string {
-  if (!user?.username) return "-";
-  return user.discriminator ? `${user.username}#${user.discriminator}` : user.username;
 }
 
 /**
@@ -111,6 +109,7 @@ export default function SettingsPage() {
             <AccountPanel user={user} endSession={endSession} />
           )}
           {tab === "appearance" && <AppearancePanel />}
+          {tab === "assistant" && <AssistantPanel />}
           {tab === "security" && <SecurityPanel endSession={endSession} />}
         </motion.div>
       </div>
@@ -242,7 +241,6 @@ function AccountPanel({
     }
   }
 
-  const handle = formatHandle(currentUser);
   const unchanged =
     username === (currentUser?.username ?? "") && disc === (currentUser?.discriminator ?? "");
   const valid = isValidUsername(username);
@@ -253,7 +251,17 @@ function AccountPanel({
       <Section title="Username" description="Your handle and optional 4-digit discriminator.">
         <div className="mb-3 flex items-center justify-between">
           <Label className="label-mono">Current</Label>
-          <span className="font-mono text-xs text-muted-foreground">{handle}</span>
+          {currentUser?.username ? (
+            <span className="font-mono text-xs">
+              <span className="text-muted-foreground">@</span>
+              <span className="text-foreground">{currentUser.username}</span>
+              {currentUser.discriminator && (
+                <span className="text-muted-foreground">#{currentUser.discriminator}</span>
+              )}
+            </span>
+          ) : (
+            <span className="font-mono text-xs text-muted-foreground">-</span>
+          )}
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="group relative">
@@ -370,6 +378,57 @@ function AppearancePanel() {
             <Moon className="h-4 w-4" /> Dark
           </Button>
         </div>
+      </div>
+    </Section>
+  );
+}
+
+/** Turn the Sero AI assistant on or off for this account (local preference). */
+function AssistantPanel() {
+  const { user } = useAuth();
+  const uid = user?.id ?? "anon";
+  const [enabled, setEnabled] = useState<boolean>(() => isAiEnabled(uid));
+
+  useEffect(() => { setEnabled(isAiEnabled(uid)); }, [uid]);
+
+  function toggle() {
+    const next = !enabled;
+    setEnabled(next);
+    setAiEnabled(uid, next);
+  }
+
+  return (
+    <Section
+      title="AI assistant"
+      description="Sero gives study help and answers questions about your decks."
+    >
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-border/50 bg-background/40 p-4">
+        <div className="min-w-0">
+          <p className="text-sm font-medium">Show Sero</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {enabled
+              ? "On - the assistant is available across the app."
+              : "Off - no assistant, greeting, or AI features are shown."}
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          aria-label="Toggle the AI assistant"
+          onClick={toggle}
+          className={cn(
+            "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20",
+            enabled ? "bg-primary" : "bg-muted",
+          )}
+        >
+          <span
+            className={cn(
+              "inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-200",
+              enabled ? "translate-x-6" : "translate-x-1",
+            )}
+          />
+        </button>
       </div>
     </Section>
   );

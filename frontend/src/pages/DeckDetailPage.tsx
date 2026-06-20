@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import { motion, useReducedMotion } from "motion/react";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
 import {
   ArrowLeft, Play, Share2, Plus, Pencil, Trash2, Loader2, GripVertical, Settings2, Image as ImageIcon, Check, ArrowLeftRight,
@@ -257,8 +257,9 @@ export default function DeckDetailPage() {
 
   function toggleSelectAll() {
     setSelected((s) => {
-      if (s.size >= visibleGroups.length && visibleGroups.length > 0) return new Set();
-      return new Set(visibleGroups.map((g) => g.rep.id));
+      const ids = visibleGroups.map((g) => g.rep.id);
+      const allSelected = ids.length > 0 && ids.every((id) => s.has(id));
+      return allSelected ? new Set() : new Set(ids);
     });
   }
 
@@ -380,7 +381,16 @@ export default function DeckDetailPage() {
             </div>
 
             {/* Bulk selection bar: tick rows below, then group them together. */}
+            <AnimatePresence initial={false}>
             {selected.size > 0 && (
+              <motion.div
+                key="bulk-bar"
+                initial={reduce ? false : { opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={reduce ? { opacity: 0 } : { opacity: 0, height: 0 }}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                className="overflow-hidden"
+              >
               <div className="flex flex-wrap items-center gap-2 rounded-xl border border-primary/40 bg-primary/5 px-3 py-2">
                 <span className="text-sm font-medium">{selected.size} selected</span>
                 <div className="flex-1" />
@@ -419,7 +429,9 @@ export default function DeckDetailPage() {
                   </>
                 )}
               </div>
+              </motion.div>
             )}
+            </AnimatePresence>
 
             {visibleGroups.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border/60 p-10 text-center">
@@ -431,7 +443,7 @@ export default function DeckDetailPage() {
                   <input
                     type="checkbox"
                     aria-label="Select all"
-                    checked={visibleGroups.length > 0 && selected.size >= visibleGroups.length}
+                    checked={visibleGroups.length > 0 && visibleGroups.every((g) => selected.has(g.rep.id))}
                     onChange={toggleSelectAll}
                     className="h-4 w-4 shrink-0 cursor-pointer accent-primary"
                   />

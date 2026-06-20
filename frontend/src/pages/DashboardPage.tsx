@@ -22,16 +22,22 @@ import {
 } from "@/lib/api";
 
 export default function DashboardPage() {
-  const { needsUsername, refreshUser } = useAuth();
+  const { user, needsUsername, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const reduce = useReducedMotion();
+  const uid = user?.id ?? "anon";
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [showUsernameDialog, setShowUsernameDialog] = useState(false);
   const [assistantReserved, setAssistantReserved] = useState(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  // One-time welcome shown at the bell after a user's first sign-up. Kept local
+  // (not a server notification). Once opened it is marked seen (badge clears)
+  // but stays visible for the session; it never returns in a later session.
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [welcomeSeen, setWelcomeSeen] = useState(false);
   const redeemedRef = useRef<Set<string>>(new Set());
 
   const [view, setView] = useState<DashboardView>(() => {
@@ -119,6 +125,40 @@ export default function DashboardPage() {
     const t = setInterval(load, 25000);
     return () => clearInterval(t);
   }, []);
+
+  // Show a one-time welcome at the bell on the user's first visit after sign-up.
+  useEffect(() => {
+    if (uid === "anon") return;
+    try {
+      if (!localStorage.getItem(`uski.welcomed.${uid}`)) setShowWelcome(true);
+    } catch { /* ignore */ }
+  }, [uid]);
+
+  const welcomeNotification: Notification = {
+    id: "welcome",
+    deck_id: null,
+    kind: "welcome",
+    message: "Welcome to USki! Thanks for signing up. Create your first deck to get started.",
+    seen: welcomeSeen,
+  };
+  const allNotifications = useMemo(
+    () => (showWelcome ? [welcomeNotification, ...notifications] : notifications),
+    // welcomeNotification is derived from welcomeSeen; deps cover the real inputs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [showWelcome, welcomeSeen, notifications],
+  );
+
+  function dismissNotifications() {
+    if (showWelcome && !welcomeSeen) {
+      try { localStorage.setItem(`uski.welcomed.${uid}`, "1"); } catch { /* ignore */ }
+      setWelcomeSeen(true);
+    }
+    const unseen = notifications.filter((n) => !n.seen).map((n) => n.id);
+    if (unseen.length) {
+      markNotificationsSeen(unseen).catch(() => {});
+      setNotifications((ns) => ns.map((n) => ({ ...n, seen: true })));
+    }
+  }
 
   const dueTotal = useMemo(() => Object.values(dueMap).reduce((a, b) => a + b, 0), [dueMap]);
   const dueDecks = useMemo(() => decks.filter((d) => (dueMap[d.id] ?? 0) > 0), [decks, dueMap]);
@@ -226,14 +266,8 @@ export default function DashboardPage() {
             </>
           )}
           <NotificationBell
-            notifications={notifications}
-            onOpen={() => {
-              const unseen = notifications.filter((n) => !n.seen).map((n) => n.id);
-              if (unseen.length) {
-                markNotificationsSeen(unseen).catch(() => {});
-                setNotifications((ns) => ns.map((n) => ({ ...n, seen: true })));
-              }
-            }}
+            notifications={allNotifications}
+            onOpen={dismissNotifications}
           />
         </header>
 
