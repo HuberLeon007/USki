@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Loader2 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -8,6 +8,10 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { DECK_ICON_KEYS, deckIconFor, DECK_COLOR_KEYS, deckColorFor, DeckBadge } from "@/lib/deck-icons";
 import { createDeck, ApiError, type Deck } from "@/lib/api";
+import { useAuth } from "@/app/auth-context";
+import { saveDraft, loadDraft, clearDraft } from "@/lib/draft-store";
+
+const DRAFT_ID = "newdeck";
 
 interface Props {
   open: boolean;
@@ -17,12 +21,37 @@ interface Props {
 }
 
 export function NewDeckDialog({ open, onOpenChange, groupId, onCreated }: Props) {
+  const { user } = useAuth();
+  const uid = user?.id ?? "anon";
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [icon, setIcon] = useState<string | null>(null);
   const [color, setColor] = useState<string>("violet");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Restore an unsaved new-deck draft when the dialog opens.
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    loadDraft<{ title?: string; description?: string; icon?: string | null; color?: string }>(uid, DRAFT_ID)
+      .then((d) => {
+        if (!alive || !d) return;
+        if (d.title) setTitle(d.title);
+        if (d.description) setDescription(d.description);
+        if (d.icon !== undefined) setIcon(d.icon);
+        if (d.color) setColor(d.color);
+      });
+    return () => { alive = false; };
+  }, [open, uid]);
+
+  // Debounced encrypted autosave while the dialog is open.
+  useEffect(() => {
+    if (!open) return;
+    if (!title.trim() && !description.trim()) return;
+    const t = setTimeout(() => { saveDraft(uid, DRAFT_ID, { title, description, icon, color }); }, 600);
+    return () => clearTimeout(t);
+  }, [open, title, description, icon, color, uid]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -31,6 +60,7 @@ export function NewDeckDialog({ open, onOpenChange, groupId, onCreated }: Props)
     setError(null);
     try {
       const deck = await createDeck({ title: title.trim(), description, group_id: groupId ?? null, icon, color });
+      await clearDraft(uid, DRAFT_ID);
       onCreated(deck);
       setTitle("");
       setDescription("");
@@ -38,10 +68,11 @@ export function NewDeckDialog({ open, onOpenChange, groupId, onCreated }: Props)
       setColor("violet");
       onOpenChange(false);
     } catch (err) {
+      // Keep the encrypted draft on failure so nothing is lost.
       if (err instanceof ApiError && err.status === 409) {
         setError("You already have a deck with this name.");
       } else {
-        setError("Could not create deck. Please try again.");
+        setError("Could not create deck. Your draft is kept locally — please try again.");
       }
     } finally {
       setLoading(false);

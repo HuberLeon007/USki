@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 import {
   ArrowLeft, Play, Share2, Plus, Pencil, Trash2, Loader2, GripVertical, Settings2, Image as ImageIcon, Check, ArrowLeftRight,
 } from "lucide-react";
@@ -14,6 +15,8 @@ import { ReviewSession } from "@/components/review/ReviewSession";
 import { ShareDialog } from "@/components/decks/ShareDialog";
 import { AssistantBubble } from "@/components/dashboard/assistant/AssistantBubble";
 import { SelectMenu } from "@/components/ui/select-menu";
+import { useAuth } from "@/app/auth-context";
+import { saveDraft, loadDraft, clearDraft } from "@/lib/draft-store";
 import { cn } from "@/lib/utils";
 import {
   DECK_ICON_KEYS, deckIconFor, DECK_COLOR_KEYS, deckColorFor, DeckBadge,
@@ -24,6 +27,14 @@ import {
 } from "@/lib/api";
 
 type Mode = "study" | "manage" | "review" | "custom" | "settings" | "editor";
+
+interface DraftShape {
+  front?: string;
+  back?: string;
+  groupLabel?: string;
+  groupColor?: string;
+  makeReverse?: boolean;
+}
 
 const GROUP_COLORS = [
   { name: "None", value: "" },
@@ -48,6 +59,8 @@ export default function DeckDetailPage() {
   const { deckId = "" } = useParams();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
+  const { user } = useAuth();
+  const uid = user?.id ?? "anon";
 
   const [deck, setDeck] = useState<Deck | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
@@ -69,6 +82,9 @@ export default function DeckDetailPage() {
   const [groupLabel, setGroupLabel] = useState("");
   const [groupColor, setGroupColor] = useState("");
   const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
+  // Stable id for the in-progress draft (per deck + card; "new" for a new card).
+  const draftId = (cardId: string | null) => `card:${deckId}:${cardId ?? "new"}`;
 
   // card list filter + drag
   const [filter, setFilter] = useState("");
@@ -98,7 +114,11 @@ export default function DeckDetailPage() {
 
   function openNew() {
     setEditingId(null); setFront(""); setBack(""); setMakeReverse(false); setBidirInitial(false);
-    setGroupLabel(""); setGroupColor(""); setMode("editor");
+    setGroupLabel(""); setGroupColor(""); setSaveFailed(false); setMode("editor");
+    // Restore an unsaved new-card draft, if any.
+    loadDraft<DraftShape>(uid, draftId(null)).then((d) => {
+      if (d) { setFront(d.front ?? ""); setBack(d.back ?? ""); setGroupLabel(d.groupLabel ?? ""); setGroupColor(d.groupColor ?? ""); setMakeReverse(Boolean(d.makeReverse)); }
+    });
   }
   function openEdit(c: Card) {
     // Always edit the note's primary (basic) card; the reverse mirrors it.
@@ -106,7 +126,11 @@ export default function DeckDetailPage() {
     const bidir = Boolean(rep.note_id) && cards.some((x) => x.note_id === rep.note_id && x.id !== rep.id);
     setEditingId(rep.id); setFront(rep.front_html); setBack(rep.back_html);
     setMakeReverse(bidir); setBidirInitial(bidir);
-    setGroupLabel(rep.group_label ?? ""); setGroupColor(rep.group_color ?? ""); setMode("editor");
+    setGroupLabel(rep.group_label ?? ""); setGroupColor(rep.group_color ?? ""); setSaveFailed(false); setMode("editor");
+    // Restore unsaved edits for this card, if any (overrides the loaded copy).
+    loadDraft<DraftShape>(uid, draftId(rep.id)).then((d) => {
+      if (d) { setFront(d.front ?? ""); setBack(d.back ?? ""); setGroupLabel(d.groupLabel ?? ""); setGroupColor(d.groupColor ?? ""); }
+    });
   }
 
   async function save() {
@@ -127,12 +151,39 @@ export default function DeckDetailPage() {
         });
         setCards(await listCards(deckId)); // reload (reverse card may be added)
       }
+      // Saved -> the local draft is no longer needed.
+      await clearDraft(uid, draftId(editingId));
+      setSaveFailed(false);
       setMode("manage"); setEditingId(null); setFront(""); setBack("");
       loadStats();
+    } catch {
+      // Backend/DB unreachable: keep the encrypted draft, stay in the editor.
+      setSaveFailed(true);
+      toast.error("Couldn't reach the server. Your draft is saved locally and will retry.");
     } finally {
       setSaving(false);
     }
   }
+
+  // Debounced encrypted autosave of the in-progress card while editing.
+  useEffect(() => {
+    if (mode !== "editor") return;
+    if (!front.trim() && !back.trim()) return;
+    const t = setTimeout(() => {
+      saveDraft(uid, draftId(editingId), { front, back, groupLabel, groupColor, makeReverse });
+    }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, front, back, groupLabel, groupColor, makeReverse, editingId, uid, deckId]);
+
+  // Auto-retry the save once the connection comes back (draft was kept locally).
+  useEffect(() => {
+    if (!saveFailed) return;
+    const retry = () => { if (mode === "editor") { toast("Back online — saving your draft…"); void save(); } };
+    window.addEventListener("online", retry);
+    return () => window.removeEventListener("online", retry);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saveFailed, mode]);
 
   // ---- drag & drop reorder (study order, top -> bottom) ----
   function onDrop(targetRepId: string) {
@@ -193,7 +244,7 @@ export default function DeckDetailPage() {
           groupColor={groupColor} onGroupColor={setGroupColor}
           showReverse={true} makeReverse={makeReverse} onMakeReverse={setMakeReverse}
           saving={saving} canSave={Boolean(front.trim())}
-          onCancel={() => { setMode("manage"); setEditingId(null); }}
+          onCancel={() => { void clearDraft(uid, draftId(editingId)); setSaveFailed(false); setMode("manage"); setEditingId(null); }}
           onSave={save}
         />
         <AssistantBubble deckId={deckId} />
