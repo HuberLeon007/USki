@@ -83,7 +83,13 @@ async function rawFetch<T>(
     );
   }
 
-  return (await response.json()) as T;
+  // 204 No Content (and other empty bodies, e.g. DELETE) have nothing to parse.
+  if (response.status === 204 || response.headers.get("content-length") === "0") {
+    return undefined as T;
+  }
+  const text = await response.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
 }
 
 const REFRESH_TIMEOUT_MS = 5000;

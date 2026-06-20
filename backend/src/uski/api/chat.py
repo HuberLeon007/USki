@@ -43,7 +43,7 @@ def send_message(
             question, deck.owner_id, request.deck_id,
             embedder=embedder, chunk_repo=chunk_repo,
         )
-        system = ChatMessage(role="system", content=rag.build_system_prompt(contexts))
+        system = ChatMessage(role="system", content=rag.build_system_prompt(contexts, deck.title))
         request = request.model_copy(update={"messages": [system, *request.messages]})
 
     try:
@@ -95,7 +95,7 @@ async def stream_message(
                     question, deck.owner_id, request.deck_id,
                     embedder=embedder, chunk_repo=chunk_repo,
                 )
-                system = ChatMessage(role="system", content=rag.build_system_prompt(contexts))
+                system = ChatMessage(role="system", content=rag.build_system_prompt(contexts, deck.title))
                 req = request.model_copy(update={"messages": [system, *request.messages]})
             yield sse({"type": "status", "text": "Thinking"})
             for delta in ai_chat_stream(req):

@@ -119,7 +119,7 @@ async def create_invite(
 async def redeem_invite(
     body: RedeemRequest,
     invite_repo: InviteRepoDep, share_repo: ShareRepoDep, deck_repo: DeckRepoDep,
-    audit: AuditRepoDep,
+    audit: AuditRepoDep, notify: NotificationRepoDep, user_repo: UserRepoDep,
     user: CurrentUser = Depends(get_current_user),
 ):
     invite = invite_repo.get_by_code(body.code)
@@ -129,9 +129,17 @@ async def redeem_invite(
     if deck is None:
         raise HTTPException(status_code=404, detail="Deck no longer exists")
     if deck.owner_id == user.id:
-        raise HTTPException(status_code=400, detail="You already own this deck")
+        raise HTTPException(status_code=400, detail="You can't use your own invite link.")
+    if invite.get("redeemed_by"):
+        raise HTTPException(status_code=409, detail="This invite link has already been used.")
     row = share_repo.grant(invite["deck_id"], user.id, invite["permission"], invite["created_by"])
+    invite_repo.mark_redeemed(body.code, user.id)  # single-use
     audit.record(invite["deck_id"], user.id, "redeem", {"permission": invite["permission"]})
+    # Tell the deck owner someone joined.
+    handle = user_repo.get_handle(user.id) or "Someone"
+    notify.create(invite["created_by"], invite["deck_id"], "redeemed",
+                  f"{handle} joined your shared deck '{deck.title}'.")
+    logger.info("Invite redeemed deck={} by={}", invite["deck_id"], user.id)
     return row
 
 

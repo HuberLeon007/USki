@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
-import { Menu, Plus, Layers, Users, Loader2, FolderPlus, Folder, Play, Download, Search, Image as ImageIcon, LayoutGrid, List, X as XIcon, Trash2, ChevronDown, ArrowLeftRight } from "lucide-react";
+import { Menu, Plus, Layers, Users, Loader2, FolderPlus, Folder, Play, Download, Search, Image as ImageIcon, LayoutGrid, List, X as XIcon, Trash2, ChevronDown, ArrowLeftRight, Bell } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/app/auth-context";
 import { cn } from "@/lib/utils";
@@ -18,8 +18,8 @@ import { StateCounts } from "@/lib/state-counts";
 import {
   listDecks, listSharedDecks, listGroups, createGroup, reviewStats,
   listNotifications, markNotificationsSeen, getDeckAccess, browseCards,
-  outgoingShares, leaveSharedDeck, revokeShare, redeemInvite,
-  type Deck, type DeckGroup, type DeckAccess, type BrowseCard, type ReviewStats, type OutgoingShare,
+  outgoingShares, leaveSharedDeck, revokeShare, redeemInvite, ApiError,
+  type Deck, type DeckGroup, type DeckAccess, type BrowseCard, type ReviewStats, type OutgoingShare, type Notification,
 } from "@/lib/api";
 
 export default function DashboardPage() {
@@ -33,6 +33,8 @@ export default function DashboardPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showUsernameDialog, setShowUsernameDialog] = useState(false);
   const [assistantReserved, setAssistantReserved] = useState(0);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const redeemedRef = useRef<Set<string>>(new Set());
 
   const [view, setView] = useState<DashboardView>(() => {
     try { return (sessionStorage.getItem("uski.view") as DashboardView) || "overview"; }
@@ -104,21 +106,17 @@ export default function DashboardPage() {
   // Redeem a deck-invite link (?invite=CODE) once on load, then strip the param.
   useEffect(() => {
     const code = searchParams.get("invite");
-    if (!code) return;
+    if (!code || redeemedRef.current.has(code)) return;
+    redeemedRef.current.add(code); // guard against StrictMode double-invoke
     setSearchParams((p) => { p.delete("invite"); return p; }, { replace: true });
     redeemInvite(code)
       .then(() => { toast.success("Deck added to your shared decks"); refresh(); })
-      .catch(() => toast.error("This invite link is invalid or already used."));
+      .catch((e) => toast.error(e instanceof ApiError ? e.message : "This invite link is invalid or already used."));
   }, [searchParams, setSearchParams, refresh]);
 
   useEffect(() => {
     listNotifications()
-      .then((ns) => {
-        if (ns.length) {
-          ns.forEach((n) => toast(n.message));
-          markNotificationsSeen(ns.map((n) => n.id)).catch(() => {});
-        }
-      })
+      .then(setNotifications)
       .catch(() => {});
   }, []);
 
@@ -227,6 +225,16 @@ export default function DashboardPage() {
               </Button>
             </>
           )}
+          <NotificationBell
+            notifications={notifications}
+            onOpen={() => {
+              const unseen = notifications.filter((n) => !n.seen).map((n) => n.id);
+              if (unseen.length) {
+                markNotificationsSeen(unseen).catch(() => {});
+                setNotifications((ns) => ns.map((n) => ({ ...n, seen: true })));
+              }
+            }}
+          />
         </header>
 
         <main className="flex-1 overflow-y-auto [scrollbar-gutter:stable]">
@@ -830,6 +838,47 @@ function Confetti() {
           />
         );
       })}
+    </div>
+  );
+}
+
+/** Header bell: unread count + dropdown of recent notifications (e.g. someone
+ *  joined your shared deck). Marks them seen when opened. */
+function NotificationBell({ notifications, onOpen }: { notifications: Notification[]; onOpen: () => void }) {
+  const [open, setOpen] = useState(false);
+  const unread = notifications.filter((n) => !n.seen).length;
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => { const next = !open; setOpen(next); if (next) onOpen(); }}
+        aria-label={unread ? `${unread} new notifications` : "Notifications"}
+        className="relative flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      >
+        <Bell className="h-5 w-5" />
+        {unread > 0 && (
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+            {unread > 9 ? "9+" : unread}
+          </span>
+        )}
+      </button>
+      {open && (
+        <>
+          <button className="fixed inset-0 z-40 cursor-default" aria-hidden onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-11 z-50 w-80 overflow-hidden rounded-xl border border-border/60 bg-card shadow-xl">
+            <p className="label-mono px-3 pb-1 pt-2.5">Notifications</p>
+            {notifications.length === 0 ? (
+              <p className="px-3 pb-3 pt-1 text-sm text-muted-foreground">You're all caught up.</p>
+            ) : (
+              <ul className="max-h-80 overflow-y-auto pb-1.5">
+                {notifications.map((n) => (
+                  <li key={n.id} className="px-3 py-2 text-sm text-foreground/90">{n.message}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

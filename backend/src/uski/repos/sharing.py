@@ -66,6 +66,7 @@ class InMemoryShareRepo:
 class InviteRepo(Protocol):
     def create(self, deck_id: str, permission: str, created_by: str) -> dict: ...
     def get_by_code(self, code: str) -> dict | None: ...
+    def mark_redeemed(self, code: str, user_id: str) -> None: ...
 
 
 class SupabaseInviteRepo:
@@ -81,6 +82,11 @@ class SupabaseInviteRepo:
         res = self._db.table("deck_invite").select("*").eq("code", code).execute()
         return res.data[0] if res.data else None
 
+    def mark_redeemed(self, code, user_id):
+        self._db.table("deck_invite").update(
+            {"redeemed_by": user_id, "redeemed_at": datetime.now(timezone.utc).isoformat()}
+        ).eq("code", code).execute()
+
 
 class InMemoryInviteRepo:
     def __init__(self):
@@ -89,12 +95,19 @@ class InMemoryInviteRepo:
     def create(self, deck_id, permission, created_by):
         code = secrets.token_urlsafe(8)
         row = {"id": str(uuid.uuid4()), "deck_id": deck_id, "code": code,
-               "permission": permission, "created_by": created_by}
+               "permission": permission, "created_by": created_by,
+               "redeemed_by": None, "redeemed_at": None}
         self._rows[code] = row
         return row
 
     def get_by_code(self, code):
         return self._rows.get(code)
+
+    def mark_redeemed(self, code, user_id):
+        row = self._rows.get(code)
+        if row is not None:
+            row["redeemed_by"] = user_id
+            row["redeemed_at"] = datetime.now(timezone.utc).isoformat()
 
 
 # ── access log (audit) ───────────────────────────────────────

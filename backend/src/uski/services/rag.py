@@ -30,8 +30,16 @@ def retrieve_context(
     return chunk_repo.search(owner_id, deck_id, vec, k)
 
 
-def build_system_prompt(contexts: list[str]) -> str:
+def build_system_prompt(contexts: list[str], deck_name: str | None = None) -> str:
+    base = _BASE
+    if deck_name:
+        base += (
+            f' The user is currently studying the deck "{deck_name}". '
+            f'When they say "this deck", "the current deck" or "the one I have open", '
+            f'they mean "{deck_name}". You may state what the deck is about based on its '
+            f'title and the context below.'
+        )
     if not contexts:
-        return _BASE
+        return base
     joined = "\n---\n".join(contexts)
-    return f"{_BASE}\n\nContext:\n{joined}"
+    return f"{base}\n\nContext from this deck:\n{joined}"

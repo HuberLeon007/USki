@@ -89,6 +89,12 @@ export default function DeckDetailPage() {
   // card list filter + drag
   const [filter, setFilter] = useState("");
   const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  // multi-select + bulk grouping (grouping now lives here, not in the editor)
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkLabel, setBulkLabel] = useState("");
+  const [bulkColor, setBulkColor] = useState("");
 
   function loadStats() { reviewStats(deckId).then(setStats).catch(() => {}); }
 
@@ -204,7 +210,21 @@ export default function DeckDetailPage() {
   async function removeNote(ids: string[]) {
     await Promise.all(ids.map((id) => deleteCard(deckId, id)));
     setCards((cs) => cs.filter((c) => !ids.includes(c.id)));
+    setSelected((s) => { const n = new Set(s); ids.forEach((id) => n.delete(id)); return n; });
     loadStats();
+  }
+
+  function toggleSelect(id: string) {
+    setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  }
+
+  async function applyBulkGroup() {
+    const label = bulkLabel.trim() || null;
+    const color = bulkColor || null;
+    const ids = noteGroups.filter((g) => selected.has(g.rep.id)).flatMap((g) => g.ids);
+    await Promise.all(ids.map((id) => updateCard(deckId, id, { group_label: label, group_color: color })));
+    setCards(await listCards(deckId));
+    setSelected(new Set()); setBulkOpen(false); setBulkLabel(""); setBulkColor("");
   }
 
   // Group linked siblings (bidirectional notes) so each note shows once.
@@ -240,8 +260,6 @@ export default function DeckDetailPage() {
         <CardEditorScreen
           title={editingId ? "Edit card" : "New card"}
           front={front} back={back} onFront={setFront} onBack={setBack}
-          groupLabel={groupLabel} onGroupLabel={setGroupLabel}
-          groupColor={groupColor} onGroupColor={setGroupColor}
           showReverse={true} makeReverse={makeReverse} onMakeReverse={setMakeReverse}
           saving={saving} canSave={Boolean(front.trim())}
           onCancel={() => { void clearDraft(uid, draftId(editingId)); setSaveFailed(false); setMode("manage"); setEditingId(null); }}
@@ -326,25 +344,86 @@ export default function DeckDetailPage() {
               </Button>
             </div>
 
+            {/* Bulk selection bar: tick rows below, then group them together. */}
+            {selected.size > 0 && (
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-primary/40 bg-primary/5 px-3 py-2">
+                <span className="text-sm font-medium">{selected.size} selected</span>
+                <div className="flex-1" />
+                {bulkOpen ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      autoFocus
+                      value={bulkLabel}
+                      onChange={(e) => setBulkLabel(e.target.value)}
+                      placeholder="Group name"
+                      className="h-8 w-36 rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-primary/60"
+                    />
+                    <div className="flex items-center gap-1">
+                      {GROUP_COLORS.map((c) => (
+                        <button
+                          key={c.value}
+                          type="button"
+                          onClick={() => setBulkColor(c.value)}
+                          aria-label={c.name}
+                          className={cn("h-5 w-5 rounded-full border-2", bulkColor === c.value ? "border-foreground" : "border-transparent")}
+                          style={{ background: c.value || "transparent", boxShadow: c.value ? undefined : "inset 0 0 0 1px var(--border)" }}
+                        />
+                      ))}
+                    </div>
+                    <Button size="sm" className="h-8 rounded-lg" onClick={applyBulkGroup}>Apply</Button>
+                    <Button size="sm" variant="ghost" className="h-8 rounded-lg" onClick={() => setBulkOpen(false)}>Cancel</Button>
+                  </div>
+                ) : (
+                  <>
+                    <Button size="sm" variant="outline" className="h-8 gap-1.5 rounded-lg" onClick={() => setBulkOpen(true)}>Group…</Button>
+                    <Button size="sm" variant="ghost" className="h-8 rounded-lg" onClick={() => setSelected(new Set())}>Clear</Button>
+                  </>
+                )}
+              </div>
+            )}
+
             {visibleGroups.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border/60 p-10 text-center">
                 <p className="text-sm text-muted-foreground">{filter ? "No cards match." : "No cards yet. Add your first one."}</p>
               </div>
             ) : (
               <div className="overflow-hidden rounded-xl border border-border/60">
+                {!filter && <p className="border-b border-border/40 bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground">Tick rows to group them, or drag the handle to reorder.</p>}
                 <div className="divide-y divide-border/40">
                   {visibleGroups.map(({ rep, bidir, ids }) => {
                     const fL = firstLine(rep.front_html), bL = firstLine(rep.back_html);
+                    const isSel = selected.has(rep.id);
                     return (
                       <div
                         key={rep.id}
-                        draggable={!filter}
-                        onDragStart={() => setDragId(rep.id)}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={() => onDrop(rep.id)}
-                        className="group flex items-center gap-2 px-3 py-2.5 transition-colors hover:bg-accent/40"
+                        onDragOver={(e) => { if (dragId && !filter) { e.preventDefault(); setDragOverId(rep.id); } }}
+                        onDragLeave={() => setDragOverId((d) => (d === rep.id ? null : d))}
+                        onDrop={() => { onDrop(rep.id); setDragOverId(null); }}
+                        className={cn(
+                          "group flex items-center gap-2 px-3 py-2.5 transition-colors",
+                          isSel ? "bg-primary/5" : "hover:bg-accent/40",
+                          dragId === rep.id && "opacity-40",
+                          dragOverId === rep.id && dragId !== rep.id && "ring-2 ring-inset ring-primary/70",
+                        )}
                       >
-                        {!filter && <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground/50" />}
+                        <input
+                          type="checkbox"
+                          checked={isSel}
+                          onChange={() => toggleSelect(rep.id)}
+                          aria-label="Select card"
+                          className="h-4 w-4 shrink-0 cursor-pointer accent-primary"
+                        />
+                        {!filter && (
+                          <span
+                            draggable
+                            onDragStart={() => setDragId(rep.id)}
+                            onDragEnd={() => { setDragId(null); setDragOverId(null); }}
+                            title="Drag to reorder"
+                            className="flex h-7 w-6 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground/50 hover:bg-accent hover:text-foreground active:cursor-grabbing"
+                          >
+                            <GripVertical className="h-4 w-4" />
+                          </span>
+                        )}
                         <button onClick={() => openEdit(rep)} className="grid min-w-0 flex-1 grid-cols-2 items-center gap-3 text-left">
                           <span className="flex min-w-0 items-center gap-1.5">
                             <span className="min-w-0 truncate text-sm">{fL || "—"}</span>
@@ -361,7 +440,7 @@ export default function DeckDetailPage() {
                             {hasImage(rep.back_html) && <ImageIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
                           </span>
                         </button>
-                        <div className="flex shrink-0 gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                        <div className="flex shrink-0 gap-1 opacity-60 transition-opacity group-hover:opacity-100">
                           <button onClick={() => openEdit(rep)} aria-label="Edit card" className="text-muted-foreground hover:text-foreground"><Pencil className="h-4 w-4" /></button>
                           <button onClick={() => removeNote(ids)} aria-label="Delete card" className="text-destructive"><Trash2 className="h-4 w-4" /></button>
                         </div>
@@ -425,12 +504,11 @@ export default function DeckDetailPage() {
 
 /* ── Full-screen card editor ──────────────────────────────────────────── */
 function CardEditorScreen({
-  title, front, back, onFront, onBack, groupLabel, onGroupLabel, groupColor, onGroupColor,
+  title, front, back, onFront, onBack,
   showReverse, makeReverse, onMakeReverse, saving, canSave, onCancel, onSave,
 }: {
   title: string;
   front: string; back: string; onFront: (v: string) => void; onBack: (v: string) => void;
-  groupLabel: string; onGroupLabel: (v: string) => void; groupColor: string; onGroupColor: (v: string) => void;
   showReverse: boolean; makeReverse: boolean; onMakeReverse: (v: boolean) => void;
   saving: boolean; canSave: boolean; onCancel: () => void; onSave: () => void;
 }) {
@@ -457,27 +535,6 @@ function CardEditorScreen({
               <RichTextField value={back} onChange={onBack} placeholder="Answer…" ariaLabel="Card back" />
             </div>
           </RichTextProvider>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <input
-              value={groupLabel}
-              onChange={(e) => onGroupLabel(e.target.value)}
-              placeholder="Group (optional)"
-              className="h-9 w-40 rounded-lg border border-input bg-background/60 px-2.5 text-sm outline-none focus-visible:border-primary/60"
-            />
-            <div className="flex items-center gap-1">
-              {GROUP_COLORS.map((c) => (
-                <button
-                  key={c.value}
-                  type="button"
-                  onClick={() => onGroupColor(c.value)}
-                  aria-label={c.name}
-                  className={cn("h-6 w-6 rounded-full border-2", groupColor === c.value ? "border-foreground" : "border-transparent")}
-                  style={{ background: c.value || "transparent", boxShadow: c.value ? undefined : "inset 0 0 0 1px var(--border)" }}
-                />
-              ))}
-            </div>
-          </div>
 
           {showReverse && (
             <button
