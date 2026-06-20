@@ -247,7 +247,7 @@ export function HeroDemo(): JSX.Element {
           <span className="h-2.5 w-2.5 rounded-full bg-destructive/60" />
           <span className="h-2.5 w-2.5 rounded-full bg-amber-400/70" />
           <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/70" />
-          <span className="ml-2 text-[11px] font-medium text-muted-foreground">USki — Dashboard</span>
+          <span className="ml-2 text-[11px] font-medium text-muted-foreground">USki Dashboard</span>
         </div>
 
         {/* app row (relative so the docked panel can slide in over reserved padding) */}
