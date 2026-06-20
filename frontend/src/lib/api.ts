@@ -401,6 +401,9 @@ export const dueCards = (deckId: string) =>
   apiFetch<Card[]>(`/decks/${deckId}/review/due`, {}, authed);
 export const reviewStats = (deckId: string) =>
   apiFetch<ReviewStats>(`/decks/${deckId}/review/stats`, {}, authed);
+/** Reset learning progress for cards (they become 'new' again). */
+export const resetProgress = (deckId: string, cardIds: string[]) =>
+  apiFetch<void>(`/decks/${deckId}/review/reset`, { method: "POST", body: JSON.stringify({ card_ids: cardIds }) }, authed);
 export const cardIntervals = (deckId: string, cardId: string) =>
   apiFetch<IntervalPreview>(`/decks/${deckId}/review/${cardId}/intervals`, {}, authed);
 export const customStudy = (deckId: string, mode: "all" | "ahead", days = 0) =>

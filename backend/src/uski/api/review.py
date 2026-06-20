@@ -3,6 +3,7 @@
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 
 from uski.core.deps import CardRepoDep, DeckRepoDep, ScheduleRepoDep, ShareRepoDep
 from uski.core.security import CurrentUser, get_current_user
@@ -19,6 +20,27 @@ def _require_read(deck_repo, share_repo, deck_id: str, user_id: str):
     if deck is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deck not found")
     require_permission(effective_permission(user_id, deck, share_repo), Permission.READ)
+
+
+class ResetRequest(BaseModel):
+    card_ids: list[str]
+
+
+@router.post("/reset", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_progress(
+    deck_id: str,
+    body: ResetRequest,
+    deck_repo: DeckRepoDep,
+    share_repo: ShareRepoDep,
+    sched_repo: ScheduleRepoDep,
+    user: CurrentUser = Depends(get_current_user),
+) -> None:
+    """Reset learning progress for the given cards (they become 'new' again)."""
+    deck = deck_repo.get(deck_id)
+    if deck is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deck not found")
+    require_permission(effective_permission(user.id, deck, share_repo), Permission.EDIT)
+    sched_repo.delete_for(user.id, body.card_ids)
 
 
 @router.get("/due", response_model=list[CardOut])

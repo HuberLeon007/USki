@@ -15,6 +15,9 @@ class ScheduleRepo(Protocol):
         ...
 
     def upsert(self, card_id: str, user_id: str, fsrs: dict, due: str) -> None: ...
+    def delete_for(self, user_id: str, card_ids: list[str]) -> None:
+        """Drop schedules so the cards become 'new' again (reset progress)."""
+        ...
 
 
 class SupabaseScheduleRepo:
@@ -39,6 +42,11 @@ class SupabaseScheduleRepo:
             on_conflict="card_id,user_id",
         ).execute()
 
+    def delete_for(self, user_id: str, card_ids: list[str]) -> None:
+        if not card_ids:
+            return
+        self._db.table(_TABLE).delete().eq("user_id", user_id).in_("card_id", card_ids).execute()
+
 
 class InMemoryScheduleRepo:
     def __init__(self) -> None:
@@ -54,3 +62,7 @@ class InMemoryScheduleRepo:
 
     def upsert(self, card_id: str, user_id: str, fsrs: dict, due: str) -> None:
         self._rows[(card_id, user_id)] = {"fsrs": fsrs, "due": due}
+
+    def delete_for(self, user_id: str, card_ids: list[str]) -> None:
+        for cid in card_ids:
+            self._rows.pop((cid, user_id), None)

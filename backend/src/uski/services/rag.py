@@ -30,6 +30,31 @@ def retrieve_context(
     return chunk_repo.search(owner_id, deck_id, vec, k)
 
 
+def retrieve_context_all(
+    question: str,
+    owner_id: str,
+    deck_ids: list[str],
+    *,
+    embedder: Embedder,
+    chunk_repo: ChunkRepo,
+    k_per_deck: int = 2,
+    cap: int = 8,
+) -> list[str]:
+    """Cross-deck retrieval: pull the most relevant chunks from each of the
+    user's decks and merge, capped. Used when the user asks without having a
+    specific deck open (e.g. from the dashboard)."""
+    if not deck_ids:
+        return []
+    vec = embedder.embed([question])[0]
+    out: list[str] = []
+    for did in deck_ids:
+        for content in chunk_repo.search(owner_id, did, vec, k_per_deck):
+            out.append(content)
+            if len(out) >= cap:
+                return out
+    return out
+
+
 def build_system_prompt(contexts: list[str], deck_name: str | None = None) -> str:
     base = _BASE
     if deck_name:

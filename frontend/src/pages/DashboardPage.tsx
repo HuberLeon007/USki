@@ -115,9 +115,11 @@ export default function DashboardPage() {
   }, [searchParams, setSearchParams, refresh]);
 
   useEffect(() => {
-    listNotifications()
-      .then(setNotifications)
-      .catch(() => {});
+    const load = () => listNotifications().then(setNotifications).catch(() => {});
+    load();
+    // Interim live updates until Supabase Realtime is wired (poll every 25s).
+    const t = setInterval(load, 25000);
+    return () => clearInterval(t);
   }, []);
 
   const dueTotal = useMemo(() => Object.values(dueMap).reduce((a, b) => a + b, 0), [dueMap]);

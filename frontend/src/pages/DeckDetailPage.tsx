@@ -23,7 +23,7 @@ import {
 } from "@/lib/deck-icons";
 import {
   listCards, createCard, updateCard, deleteCard, deleteDeck, getDeck, updateDeck, listGroups, reorderCards,
-  setBidirectional, reviewStats, type Card, type Deck, type DeckGroup, type ReviewStats,
+  setBidirectional, resetProgress, reviewStats, type Card, type Deck, type DeckGroup, type ReviewStats,
 } from "@/lib/api";
 
 type Mode = "study" | "manage" | "review" | "custom" | "settings" | "editor";
@@ -227,6 +227,33 @@ export default function DeckDetailPage() {
     setSelected(new Set()); setBulkOpen(false); setBulkLabel(""); setBulkColor("");
   }
 
+  const selectedIds = () => noteGroups.filter((g) => selected.has(g.rep.id)).flatMap((g) => g.ids);
+
+  async function bulkDelete() {
+    const ids = selectedIds();
+    if (!ids.length) return;
+    await Promise.all(ids.map((id) => deleteCard(deckId, id)));
+    setCards((cs) => cs.filter((c) => !ids.includes(c.id)));
+    setSelected(new Set());
+    loadStats();
+  }
+
+  async function bulkReset() {
+    const ids = selectedIds();
+    if (!ids.length) return;
+    await resetProgress(deckId, ids);
+    setSelected(new Set());
+    loadStats();
+    toast.success("Learning progress reset.");
+  }
+
+  function toggleSelectAll() {
+    setSelected((s) => {
+      if (s.size >= visibleGroups.length && visibleGroups.length > 0) return new Set();
+      return new Set(visibleGroups.map((g) => g.rep.id));
+    });
+  }
+
   // Group linked siblings (bidirectional notes) so each note shows once.
   const noteGroups = useMemo(() => {
     const map = new Map<string, Card[]>();
@@ -376,6 +403,10 @@ export default function DeckDetailPage() {
                 ) : (
                   <>
                     <Button size="sm" variant="outline" className="h-8 gap-1.5 rounded-lg" onClick={() => setBulkOpen(true)}>Group…</Button>
+                    <Button size="sm" variant="outline" className="h-8 rounded-lg" onClick={bulkReset}>Reset progress</Button>
+                    <Button size="sm" variant="ghost" className="h-8 gap-1.5 rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={bulkDelete}>
+                      <Trash2 className="h-4 w-4" /> Delete
+                    </Button>
                     <Button size="sm" variant="ghost" className="h-8 rounded-lg" onClick={() => setSelected(new Set())}>Clear</Button>
                   </>
                 )}
@@ -388,7 +419,18 @@ export default function DeckDetailPage() {
               </div>
             ) : (
               <div className="overflow-hidden rounded-xl border border-border/60">
-                {!filter && <p className="border-b border-border/40 bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground">Tick rows to group them, or drag the handle to reorder.</p>}
+                <div className="flex items-center gap-2 border-b border-border/40 bg-muted/30 px-3 py-1.5">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all"
+                    checked={visibleGroups.length > 0 && selected.size >= visibleGroups.length}
+                    onChange={toggleSelectAll}
+                    className="h-4 w-4 shrink-0 cursor-pointer accent-primary"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    {selected.size > 0 ? `${selected.size} selected` : "Select all · tick rows to group, or drag the handle to reorder"}
+                  </span>
+                </div>
                 <div className="divide-y divide-border/40">
                   {visibleGroups.map(({ rep, bidir, ids }) => {
                     const fL = firstLine(rep.front_html), bL = firstLine(rep.back_html);

@@ -45,6 +45,20 @@ def send_message(
         )
         system = ChatMessage(role="system", content=rag.build_system_prompt(contexts, deck.title))
         request = request.model_copy(update={"messages": [system, *request.messages]})
+    else:
+        # No deck open: ground across all of the user's decks (cross-deck RAG).
+        # Best-effort: if retrieval fails, still answer without grounding.
+        try:
+            question = next((m.content for m in reversed(request.messages) if m.role == "user"), "")
+            deck_ids = [d.id for d in deck_repo.list_for(current_user.id)]
+            contexts = rag.retrieve_context_all(
+                question, current_user.id, deck_ids, embedder=embedder, chunk_repo=chunk_repo,
+            )
+            if contexts:
+                system = ChatMessage(role="system", content=rag.build_system_prompt(contexts))
+                request = request.model_copy(update={"messages": [system, *request.messages]})
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Cross-deck RAG skipped: {}", exc)
 
     try:
         return ai_chat(request)
@@ -97,6 +111,16 @@ async def stream_message(
                 )
                 system = ChatMessage(role="system", content=rag.build_system_prompt(contexts, deck.title))
                 req = request.model_copy(update={"messages": [system, *request.messages]})
+            else:
+                yield sse({"type": "status", "text": "Searching across your decks"})
+                question = next((m.content for m in reversed(request.messages) if m.role == "user"), "")
+                deck_ids = [d.id for d in deck_repo.list_for(current_user.id)]
+                contexts = rag.retrieve_context_all(
+                    question, current_user.id, deck_ids, embedder=embedder, chunk_repo=chunk_repo,
+                )
+                if contexts:
+                    system = ChatMessage(role="system", content=rag.build_system_prompt(contexts))
+                    req = request.model_copy(update={"messages": [system, *request.messages]})
             yield sse({"type": "status", "text": "Thinking"})
             for delta in ai_chat_stream(req):
                 yield sse({"type": "delta", "text": delta})
