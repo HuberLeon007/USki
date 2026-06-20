@@ -28,8 +28,32 @@ interface StoredChat extends ChatSummary {
   messages: AssistantMessage[];
 }
 
+/** The live (in-progress) conversation, persisted so it survives navigation/reload. */
+interface StoredCurrent {
+  id: string;
+  messages: AssistantMessage[];
+  draft: string;
+}
+
 function historyKey(uid: string) { return `uski.sero.history.${uid}`; }
 function greetedKey(uid: string) { return `uski.sero.greeted.${uid}`; }
+function currentKey(uid: string) { return `uski.sero.current.${uid}`; }
+
+function loadCurrent(uid: string): StoredCurrent | null {
+  try {
+    const raw = localStorage.getItem(currentKey(uid));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.messages)) return null;
+    return {
+      id: typeof parsed.id === "string" ? parsed.id : Math.random().toString(36).slice(2),
+      messages: parsed.messages,
+      draft: typeof parsed.draft === "string" ? parsed.draft : "",
+    };
+  } catch {
+    return null;
+  }
+}
 
 function loadHistory(uid: string): StoredChat[] {
   try {
@@ -61,9 +85,51 @@ export function AssistantBubble({ className, dueContext, deckId, onReservedWidth
   const [history, setHistory] = useState<StoredChat[]>([]);
   const greetedRef = useRef(false);
   const currentIdRef = useRef<string>(Math.random().toString(36).slice(2));
+  // True once we've attempted to restore the persisted live conversation for `uid`.
+  const hydratedRef = useRef(false);
+  // Always-current conversation, used to flush synchronously on close/unmount.
+  const convRef = useRef(conversation);
+  convRef.current = conversation;
+
+  const persistCurrent = useCallback(() => {
+    if (uid === "anon") return;
+    try {
+      localStorage.setItem(
+        currentKey(uid),
+        JSON.stringify({ id: currentIdRef.current, messages: convRef.current.messages, draft: convRef.current.draft }),
+      );
+    } catch { /* ignore storage errors */ }
+  }, [uid]);
 
   // Load persisted recent chats once the user is known.
   useEffect(() => { setHistory(loadHistory(uid)); }, [uid]);
+
+  // Restore the live conversation (messages + draft) across mounts and reloads.
+  // A restored non-empty chat is marked greeted so the greeting effect stays quiet.
+  useEffect(() => {
+    hydratedRef.current = false;
+    const stored = loadCurrent(uid);
+    if (stored && stored.messages.length > 0) {
+      currentIdRef.current = stored.id;
+      greetedRef.current = true;
+      setConversation({ messages: stored.messages, draft: stored.draft });
+    } else if (stored && stored.draft) {
+      setConversation((prev) => ({ ...prev, draft: stored.draft }));
+    }
+    hydratedRef.current = true;
+  }, [uid]);
+
+  // Persist the live conversation on every change (debounced). The debounce also
+  // discards the stale empty write that would otherwise clobber a restore on mount.
+  useEffect(() => {
+    if (!hydratedRef.current || uid === "anon") return;
+    const t = setTimeout(persistCurrent, 250);
+    return () => clearTimeout(t);
+  }, [conversation, uid, persistCurrent]);
+
+  // Flush synchronously on unmount (e.g. navigating to another route) so the last
+  // change within the debounce window is never lost.
+  useEffect(() => () => { persistCurrent(); }, [persistCurrent]);
 
   // Reserve space only while docked.
   useEffect(() => {
@@ -103,7 +169,7 @@ export function AssistantBubble({ className, dueContext, deckId, onReservedWidth
   }, [uid]);
 
   const open = () => setState("small");
-  const close = () => { archiveCurrent(conversation.messages); setState("closed"); };
+  const close = () => { archiveCurrent(conversation.messages); persistCurrent(); setState("closed"); };
   const toggleDock = () => setState((p) => (p === "docked" ? "small" : "docked"));
 
   const setDraft = (draft: string) => setConversation((prev) => ({ ...prev, draft }));

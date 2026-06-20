@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sidebar, type DashboardView } from "@/components/dashboard/Sidebar";
-import { SettingsDialog } from "@/components/dashboard/SettingsDialog";
 import { AssistantBubble } from "@/components/dashboard/assistant/AssistantBubble";
 import { OnboardingStep } from "@/components/auth/OnboardingStep";
 import { NewDeckDialog } from "@/components/decks/NewDeckDialog";
@@ -30,7 +29,6 @@ export default function DashboardPage() {
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [showUsernameDialog, setShowUsernameDialog] = useState(false);
   const [assistantReserved, setAssistantReserved] = useState(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -176,7 +174,7 @@ export default function DashboardPage() {
       <Sidebar
         collapsed={navCollapsed}
         onToggleCollapse={() => setNavCollapsed((v) => !v)}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={() => navigate("/settings")}
         mobileOpen={mobileNavOpen}
         onCloseMobile={() => setMobileNavOpen(false)}
         view={view}
@@ -337,7 +335,6 @@ export default function DashboardPage() {
       </div>
 
       <AssistantBubble dueContext={dueContext} onReservedWidthChange={setAssistantReserved} />
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       <OnboardingStep open={showUsernameDialog} onOpenChange={setShowUsernameDialog} />
       <NewDeckDialog
         open={newDeckGroup !== undefined}
@@ -470,8 +467,8 @@ function OverviewPanel({
 
         {/* Progress: done out of the frozen day total. */}
         <div className="mt-5">
-          <div className="h-2 w-full overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Today's review progress">
-            <div className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out" style={{ width: `${pct}%` }} />
+          <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Today's review progress">
+            <div className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out motion-reduce:transition-none" style={{ width: `${pct}%` }} />
           </div>
           <div className="mt-1.5 flex items-center justify-between text-xs text-muted-foreground">
             <span><span className="font-mono tabular-nums text-foreground">{done}</span> of <span className="font-mono tabular-nums text-foreground">{startTotal}</span> done</span>

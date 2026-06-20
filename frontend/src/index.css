@@ -136,6 +136,24 @@
 .prose-card :where(blockquote) { border-left: 3px solid var(--color-border); padding-left: 0.75rem; color: var(--color-muted-foreground); }
 .prose-card:empty::before { content: ""; }
 
+/* Images: never full-bleed by default, keep aspect ratio (height follows
+   width via height:auto). `width` and `data-display` round-trip from the
+   stored card HTML, so editor + read-only view render the same way. */
+.prose-card :where(img) { max-width: 100%; height: auto; border-radius: 0.5rem; transition: width 0.12s ease; }
+.prose-card img[data-display="pictogram"] {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 0.4rem;
+  display: inline-block;
+  vertical-align: middle;
+}
+/* No animated scaling while actively dragging the resize handle. */
+.prose-card .rt-image[data-resizing="true"] img { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .prose-card :where(img) { transition: none; }
+}
+
 /* ── Modern scrollbars ──────────────────────────────────────────────
    Thin, rounded, translucent thumb that darkens on hover. Track is
    invisible. Applies app-wide (Firefox + WebKit/Chromium). */

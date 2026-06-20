@@ -4,7 +4,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Underline from "@tiptap/extension-underline";
 import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
-import Image from "@tiptap/extension-image";
+import { ResizableImage } from "./ResizableImage";
 import {
   createContext, useContext, useEffect, useReducer, useRef, useState, type ReactNode,
 } from "react";
@@ -135,7 +135,7 @@ export function RichTextField({ value, onChange, placeholder, ariaLabel }: RichT
       Underline,
       Subscript,
       Superscript,
-      Image.configure({ inline: false, allowBase64: false }),
+      ResizableImage.configure({ inline: false, allowBase64: false }),
       Placeholder.configure({ placeholder: placeholder ?? "Write…" }),
     ],
     content: value,

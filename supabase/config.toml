@@ -67,7 +67,22 @@ content_path = "./supabase/templates/otp.html"
 enable_signup = false
 enable_confirmations = false
 
+# ── Social login providers (DEV) ──
+# Disabled by default. Real client id / secret are NEVER written here; they are
+# referenced via env(...) indirection and sourced from your shell or .env (see
+# .env.example). For PROD these are configured in the Supabase Cloud dashboard.
+# Flip enabled = true and set the matching env vars to test a provider locally.
 [auth.external.google]
 enabled = false
-# client_id = ""
-# secret = ""
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+
+[auth.external.github]
+enabled = false
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GITHUB_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_EXTERNAL_GITHUB_SECRET)"
+
+[auth.external.discord]
+enabled = false
+client_id = "env(SUPABASE_AUTH_EXTERNAL_DISCORD_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_EXTERNAL_DISCORD_SECRET)"

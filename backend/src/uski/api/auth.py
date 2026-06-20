@@ -24,12 +24,26 @@ from uski.schemas.auth import (
     AuthResponse,
     ChangeUsernameRequest,
     MessageResponse,
+    MockSocialRequest,
     RefreshRequest,
     SendOtpRequest,
     SetUsernameRequest,
+    TwoFactorRequest,
+    TwoFactorResponse,
     UserResponse,
     UsernameCheckResponse,
     VerifyOtpRequest,
+)
+from uski.services.auth_identity import (
+    ProviderIdentity,
+    SupabaseAccountStore,
+    requires_onboarding,
+    resolve_account,
+)
+from uski.services.mock_identity import (
+    MockIdentity,
+    get_mock_identity,
+    mock_identity_to_profile,
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -215,11 +229,12 @@ async def get_me(
     has_username = True
     username = None
     discriminator = None
+    two_factor_email = False
     try:
         svc_client = get_supabase_client()
         user_row = (
             svc_client.table("user")
-            .select("username, discriminator")
+            .select("username, discriminator, two_factor_email")
             .eq("id", current_user.id)
             .execute()
         )
@@ -227,6 +242,7 @@ async def get_me(
             row = user_row.data[0]
             username = row.get("username")
             discriminator = row.get("discriminator")
+            two_factor_email = bool(row.get("two_factor_email") or False)
             if username is None:
                 has_username = False
         else:
@@ -240,6 +256,7 @@ async def get_me(
         username=username,
         discriminator=discriminator,
         has_username=has_username,
+        two_factor_email=two_factor_email,
     )
 
 
@@ -338,3 +355,207 @@ async def check_username(
         available=len(existing.data) == 0,
         username=username,
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Email-OTP second factor (2FA) — opt-in per-user preference flag
+# ──────────────────────────────────────────────────────────────────────────
+#
+# This is intentionally a thin flag store. The actual second-factor code
+# delivery and verification at login time reuse the existing send-otp /
+# verify-otp pair, driven by the frontend. The backend only persists and
+# exposes the user's preference; it does not introduce a new email transport.
+
+
+@router.get("/2fa", response_model=TwoFactorResponse)
+async def get_two_factor(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> TwoFactorResponse:
+    """Return whether the email-OTP second factor is enabled for the user."""
+    svc_client = get_supabase_client()
+
+    user_row = (
+        svc_client.table("user")
+        .select("two_factor_email")
+        .eq("id", current_user.id)
+        .execute()
+    )
+    enabled = False
+    if user_row.data:
+        enabled = bool(user_row.data[0].get("two_factor_email") or False)
+
+    return TwoFactorResponse(enabled=enabled)
+
+
+@router.patch("/2fa", response_model=TwoFactorResponse)
+async def set_two_factor(
+    body: TwoFactorRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> TwoFactorResponse:
+    """Enable or disable the email-OTP second factor for the current user."""
+    svc_client = get_supabase_client()
+
+    result = (
+        svc_client.table("user")
+        .update({"two_factor_email": body.enabled})
+        .eq("id", current_user.id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User profile not found",
+        )
+
+    logger.info(f"2FA email preference updated: {current_user.id} -> {body.enabled}")
+    return TwoFactorResponse(enabled=bool(result.data[0].get("two_factor_email") or False))
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Dev-only offline Mock_Social_Login (social-login, Requirement 5, 6.5, 7.5)
+# ──────────────────────────────────────────────────────────────────────────
+#
+# This endpoint is the backend half of the dev-offline experience. It mints a
+# GENUINE local Supabase session for a per-provider Mock_Identity and returns
+# the exact same canonical AuthResponse the OTP path produces, so a mock
+# session is indistinguishable from a real one everywhere past the seam
+# (tokenStorage, apiFetch, auth-context, and the unchanged security.py JWT
+# validation).
+#
+# It contacts ONLY the local Supabase instance and never any external Provider
+# (Google/GitHub/Discord) — Requirement 5.2.
+#
+# Production guard (Requirement 7.5): the route is REGISTERED only when
+# APP_MODE == "dev". In prod it does not exist, so the mock path can never be
+# invoked there, and the frontend never selects the mock adapter outside dev.
+
+
+def _ensure_mock_auth_user(admin, identity: MockIdentity, profile: dict) -> None:
+    """Idempotently ensure a confirmed local auth user exists for the mock email.
+
+    Attaches provider-mimicking metadata (display name, avatar, provider) so the
+    minted session surfaces the same Profile/Session fields a real social
+    session would fill (Requirement 6.5). If the user already exists, the create
+    call fails harmlessly and the existing user is left untouched — this is the
+    expected path for repeat logins and for the email-linking case (the google
+    Mock_Identity reuses an existing dev account email, Requirement 5.4).
+    """
+    attributes = {
+        "email": identity.email,
+        "email_confirm": True,
+        "user_metadata": {
+            "full_name": profile["display_name"],
+            "name": profile["display_name"],
+            "avatar_url": profile["avatar_url"],
+            "provider": identity.provider,
+        },
+        "app_metadata": {
+            "provider": identity.provider,
+            "providers": [identity.provider],
+        },
+    }
+    try:
+        admin.auth.admin.create_user(attributes)
+        logger.info("mock-social: created auth user for {}", identity.email)
+    except Exception as exc:  # noqa: BLE001 - existing user is expected, not fatal
+        logger.debug(
+            "mock-social: create_user skipped for {} (likely already exists): {}",
+            identity.email,
+            exc,
+        )
+
+
+def _mint_local_session(admin, anon, email: str) -> tuple[str, str, str]:
+    """Mint a genuine local Supabase session for ``email`` with zero external calls.
+
+    Uses the local Supabase admin (service-role) API to generate a magiclink
+    OTP for the email, then immediately verifies that OTP server-side with the
+    anon client to obtain a real ``access_token`` / ``refresh_token`` pair. The
+    resulting JWT is issued by the local GoTrue exactly like an OTP login, so it
+    validates through the unchanged JWKS path in security.py.
+
+    Returns ``(access_token, refresh_token, user_id)``.
+    """
+    link = admin.auth.admin.generate_link({"type": "magiclink", "email": email})
+    email_otp = link.properties.email_otp
+
+    result = anon.auth.verify_otp(
+        {"email": email, "token": email_otp, "type": "magiclink"}
+    )
+    session = result.session
+    if not session or not result.user:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Mock session minting failed - no session returned",
+        )
+    return session.access_token, session.refresh_token, result.user.id
+
+
+def _mock_social_login(body: MockSocialRequest) -> AuthResponse:
+    """Resolve a Mock_Identity, mint a local session, and link/onboard the account.
+
+    Builds the canonical ``AuthResponse`` by reusing the same account resolution
+    (``resolve_account``) and onboarding gate (``requires_onboarding``) the real
+    social path uses, so email-based linking (Requirement 5.4) and new-user
+    onboarding (Requirement 5.5) behave identically to OTP.
+    """
+    provider = body.provider
+    identity = get_mock_identity(provider)
+    profile = mock_identity_to_profile(identity)
+
+    admin = get_supabase_client()
+    anon = get_supabase_anon_client()
+
+    # 1. Ensure the local auth user exists (carrying provider metadata).
+    _ensure_mock_auth_user(admin, identity, profile)
+
+    # 2. Mint a genuine local Supabase session (no external Provider call).
+    access_token, refresh_token, user_id = _mint_local_session(
+        admin, anon, identity.email
+    )
+
+    # 3. Resolve to exactly one account (link existing or create + onboard new),
+    #    pinning the profile row to the auth.users id.
+    resolution = resolve_account(
+        SupabaseAccountStore(),
+        ProviderIdentity(
+            provider=provider,
+            email=identity.email,
+            provider_account_ref=user_id,
+        ),
+        account_id=user_id,
+    )
+    needs_username = requires_onboarding(resolution.account)
+
+    logger.info(
+        "mock-social: session minted for {} ({}) needs_username={}",
+        provider,
+        identity.email,
+        needs_username,
+    )
+
+    return AuthResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user_id=user_id,
+        email=identity.email,
+        needs_username=needs_username,
+    )
+
+
+# Register the dev-only route ONLY under APP_MODE=dev. Registering conditionally
+# is the production guard: in prod the route simply does not exist, so the mock
+# path can never be invoked (the frontend MockSocialAdapter would receive a 404,
+# but the frontend never selects it outside dev anyway).
+if settings.is_dev:
+
+    @router.post("/dev/mock-social", response_model=AuthResponse)
+    async def mock_social_login(body: MockSocialRequest) -> AuthResponse:
+        """Mint an offline development session for the provider's Mock_Identity.
+
+        Dev-only. Contacts only the local Supabase instance, never an external
+        Provider. Returns the canonical ``AuthResponse`` shared with OTP login.
+        """
+        return _mock_social_login(body)
+
+    logger.info("mock-social: dev-only endpoint POST /api/auth/dev/mock-social registered")

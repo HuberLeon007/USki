@@ -184,6 +184,12 @@ export interface UserResponse {
   username?: string | null;
   discriminator?: string | null;
   has_username?: boolean;
+  /** Whether the opt-in email-OTP second factor is enabled (R: 2FA). */
+  two_factor_email?: boolean;
+}
+
+export interface TwoFactorResponse {
+  enabled: boolean;
 }
 
 export interface UsernameCheckResponse {
@@ -214,6 +220,20 @@ export async function verifyOtp(
 
 export async function getMe(): Promise<UserResponse> {
   return apiFetch<UserResponse>("/auth/me", {}, { requireAuth: true });
+}
+
+/** Read the current email-OTP second-factor preference (R: 2FA). */
+export async function getTwoFactor(): Promise<TwoFactorResponse> {
+  return apiFetch<TwoFactorResponse>("/auth/2fa", {}, { requireAuth: true });
+}
+
+/** Enable or disable the email-OTP second factor for the current user (R: 2FA). */
+export async function setTwoFactor(enabled: boolean): Promise<TwoFactorResponse> {
+  return apiFetch<TwoFactorResponse>(
+    "/auth/2fa",
+    { method: "PATCH", body: JSON.stringify({ enabled }) },
+    { requireAuth: true },
+  );
 }
 
 export async function refreshToken(

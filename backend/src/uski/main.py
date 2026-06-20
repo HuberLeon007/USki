@@ -11,13 +11,19 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 from uski.api.router import api_router
-from uski.core.config import settings
+from uski.core.config import settings  # noqa: F401  (kept for parity / future use)
 from uski.core.logging import setup_logging
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan: startup and shutdown."""
+    """Application lifespan: startup and shutdown.
+
+    The offline mock social-login path is gated purely on APP_MODE: it is only
+    wired in dev (the route is registered only when ``settings.is_dev``) and is
+    dropped from prod builds on the frontend, so it cannot exist in production.
+    No separate flag or boot-time guard is needed.
+    """
     setup_logging()
     yield
 

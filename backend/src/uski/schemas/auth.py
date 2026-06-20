@@ -1,5 +1,7 @@
 """Auth request/response schemas."""
 
+from typing import Literal
+
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -41,6 +43,22 @@ class UserResponse(BaseModel):
     username: str | None = None
     discriminator: str | None = None
     has_username: bool = False
+    two_factor_email: bool = False
+
+
+class TwoFactorRequest(BaseModel):
+    """Request to toggle the opt-in email-OTP second factor."""
+
+    enabled: bool = Field(
+        ...,
+        description="Whether the email-OTP second factor is enabled for the account",
+    )
+
+
+class TwoFactorResponse(BaseModel):
+    """Current state of the opt-in email-OTP second factor."""
+
+    enabled: bool
 
 
 class MessageResponse(BaseModel):
@@ -98,4 +116,19 @@ class RefreshRequest(BaseModel):
     refresh_token: str = Field(
         ...,
         description="The refresh token from the original login",
+    )
+
+
+class MockSocialRequest(BaseModel):
+    """Request to mint an offline development session for a Mock_Identity.
+
+    Used only by the dev-only ``POST /api/auth/dev/mock-social`` endpoint. The
+    provider selects which per-provider Mock_Identity is resolved; no external
+    Provider is ever contacted (Requirement 5.1, 5.2).
+    """
+
+    provider: Literal["google", "github", "discord"] = Field(
+        ...,
+        description="The social provider whose Mock_Identity to sign in as",
+        examples=["google"],
     )

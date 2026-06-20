@@ -6,7 +6,9 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """App settings loaded from environment variables / .env file."""
 
-    # App mode: "dev" or "prod"
+    # App mode: "dev" or "prod". This alone decides the social-login adapter:
+    # dev always uses the offline mock path, prod always uses real OAuth. There
+    # is no separate flag, so the mock can never exist in production.
     APP_MODE: str = "dev"
 
     # Supabase

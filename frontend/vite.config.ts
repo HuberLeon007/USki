@@ -38,6 +38,14 @@ export default defineConfig(({ mode }) => {
       "import.meta.env.VITE_SUPABASE_ANON_KEY": JSON.stringify(
         env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY
       ),
+      // App mode. Reuses the single root-.env source of truth (APP_MODE) the
+      // backend already reads, so the frontend and backend can never disagree
+      // about the mode. dev -> offline mock adapter, prod -> real Supabase OAuth;
+      // the mock adapter is additionally dead-code-eliminated from prod builds
+      // (Requirement 7.2).
+      "import.meta.env.VITE_APP_MODE": JSON.stringify(
+        env.VITE_APP_MODE || env.APP_MODE || "dev"
+      ),
     },
   };
 });

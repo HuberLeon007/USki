@@ -31,6 +31,10 @@ services:
       # Browser runs on host, so it uses 127.0.0.1 (not host.docker.internal)
       - VITE_SUPABASE_URL=http://127.0.0.1:54321
       - VITE_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      # Social login: expose APP_MODE to the client build (single source of
+      # truth shared with the backend). Dev uses the offline mock adapter, prod
+      # uses real Supabase OAuth; the mock path is dropped from prod builds.
+      - VITE_APP_MODE=${APP_MODE:-dev}
       # API proxy target for Vite dev server (Docker -> host machine)
       - VITE_API_PROXY_TARGET=http://host.docker.internal:8000
       # HMR + file-watch polling (Windows/macOS Docker bind mounts emit no inotify)

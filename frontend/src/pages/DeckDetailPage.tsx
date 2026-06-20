@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { motion, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
 import {
   ArrowLeft, Play, Share2, Plus, Pencil, Trash2, Loader2, GripVertical, Settings2, Image as ImageIcon, Check, ArrowLeftRight,
@@ -90,6 +91,8 @@ export default function DeckDetailPage() {
   const [filter, setFilter] = useState("");
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [dragOverPos, setDragOverPos] = useState<"above" | "below" | null>(null);
+  const reduce = useReducedMotion();
   // multi-select + bulk grouping (grouping now lives here, not in the editor)
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -192,18 +195,22 @@ export default function DeckDetailPage() {
   }, [saveFailed, mode]);
 
   // ---- drag & drop reorder (study order, top -> bottom) ----
-  function onDrop(targetRepId: string) {
-    if (!dragId || dragId === targetRepId) return;
-    const order = noteGroups.map((g) => g.rep.id);
-    const from = order.indexOf(dragId);
-    const to = order.indexOf(targetRepId);
-    if (from < 0 || to < 0) return;
-    const ng = [...noteGroups];
-    const [moved] = ng.splice(from, 1);
-    ng.splice(to, 0, moved!);
+  function clearDrag() { setDragId(null); setDragOverId(null); setDragOverPos(null); }
+
+  function onDrop(targetRepId: string, pos: "above" | "below") {
+    if (!dragId || dragId === targetRepId) { clearDrag(); return; }
+    const from = noteGroups.findIndex((g) => g.rep.id === dragId);
+    if (from < 0) { clearDrag(); return; }
+    const moved = noteGroups[from]!;
+    const without = noteGroups.filter((g) => g.rep.id !== dragId);
+    const targetIdx = without.findIndex((g) => g.rep.id === targetRepId);
+    if (targetIdx < 0) { clearDrag(); return; }
+    const insertAt = pos === "below" ? targetIdx + 1 : targetIdx;
+    const ng = [...without];
+    ng.splice(insertAt, 0, moved);
     const newCards = ng.flatMap((g) => g.ids.map((id) => cards.find((c) => c.id === id)!));
     setCards(newCards);
-    setDragId(null);
+    clearDrag();
     reorderCards(deckId, newCards.map((c) => c.id)).catch(() => {});
   }
 
@@ -427,27 +434,46 @@ export default function DeckDetailPage() {
                     onChange={toggleSelectAll}
                     className="h-4 w-4 shrink-0 cursor-pointer accent-primary"
                   />
-                  <span className="text-xs text-muted-foreground">
-                    {selected.size > 0 ? `${selected.size} selected` : "Select all · tick rows to group, or drag the handle to reorder"}
-                  </span>
+                  {selected.size > 0 ? (
+                    <span className="text-xs font-medium text-foreground">{selected.size} selected</span>
+                  ) : (
+                    <span className="flex min-w-0 flex-col leading-tight" title="Tick rows to group, or drag the handle to reorder">
+                      <span className="text-xs font-medium text-foreground">Select all</span>
+                      <span className="truncate text-[11px] text-muted-foreground">Tick rows to group, or drag to reorder</span>
+                    </span>
+                  )}
                 </div>
                 <div className="divide-y divide-border/40">
                   {visibleGroups.map(({ rep, bidir, ids }) => {
                     const fL = firstLine(rep.front_html), bL = firstLine(rep.back_html);
                     const isSel = selected.has(rep.id);
+                    const isOver = dragOverId === rep.id && dragId !== null && dragId !== rep.id;
                     return (
-                      <div
+                      <motion.div
                         key={rep.id}
-                        onDragOver={(e) => { if (dragId && !filter) { e.preventDefault(); setDragOverId(rep.id); } }}
+                        layout={!reduce}
+                        transition={reduce ? { duration: 0 } : { duration: 0.2, ease: "easeOut" }}
+                        onDragOver={(e) => {
+                          if (!dragId || filter) return;
+                          e.preventDefault();
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setDragOverId(rep.id);
+                          setDragOverPos(e.clientY < rect.top + rect.height / 2 ? "above" : "below");
+                        }}
                         onDragLeave={() => setDragOverId((d) => (d === rep.id ? null : d))}
-                        onDrop={() => { onDrop(rep.id); setDragOverId(null); }}
+                        onDrop={() => onDrop(rep.id, dragOverPos ?? "above")}
                         className={cn(
-                          "group flex items-center gap-2 px-3 py-2.5 transition-colors",
+                          "group relative flex items-center gap-2 px-3 py-2.5 transition-colors",
                           isSel ? "bg-primary/5" : "hover:bg-accent/40",
                           dragId === rep.id && "opacity-40",
-                          dragOverId === rep.id && dragId !== rep.id && "ring-2 ring-inset ring-primary/70",
                         )}
                       >
+                        {isOver && dragOverPos === "above" && (
+                          <span className="pointer-events-none absolute inset-x-0 -top-px z-10 h-0.5 bg-primary" aria-hidden />
+                        )}
+                        {isOver && dragOverPos === "below" && (
+                          <span className="pointer-events-none absolute inset-x-0 -bottom-px z-10 h-0.5 bg-primary" aria-hidden />
+                        )}
                         <input
                           type="checkbox"
                           checked={isSel}
@@ -459,20 +485,20 @@ export default function DeckDetailPage() {
                           <span
                             draggable
                             onDragStart={() => setDragId(rep.id)}
-                            onDragEnd={() => { setDragId(null); setDragOverId(null); }}
+                            onDragEnd={clearDrag}
                             title="Drag to reorder"
                             className="flex h-7 w-6 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground/50 hover:bg-accent hover:text-foreground active:cursor-grabbing"
                           >
                             <GripVertical className="h-4 w-4" />
                           </span>
                         )}
-                        <button onClick={() => openEdit(rep)} className="grid min-w-0 flex-1 grid-cols-2 items-center gap-3 text-left">
-                          <span className="flex min-w-0 items-center gap-1.5">
-                            <span className="min-w-0 truncate text-sm">{fL || "—"}</span>
+                        <button onClick={() => openEdit(rep)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                          <span className="flex min-w-0 flex-1 basis-0 items-center gap-1.5">
+                            <span className="min-w-0 flex-1 truncate text-sm">{fL || "—"}</span>
                             {hasImage(rep.front_html) && <ImageIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
                           </span>
-                          <span className="flex min-w-0 items-center gap-1.5">
-                            <span className="min-w-0 truncate text-sm text-muted-foreground">{bL || "—"}</span>
+                          <span className="flex min-w-0 flex-1 basis-0 items-center gap-1.5">
+                            <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">{bL || "—"}</span>
                             {bidir && (
                               <span className="inline-flex shrink-0 items-center gap-1 rounded bg-primary/10 px-1.5 text-[10px] font-medium text-primary" title="Studied both directions">
                                 <ArrowLeftRight className="h-3 w-3" /> both
@@ -486,7 +512,7 @@ export default function DeckDetailPage() {
                           <button onClick={() => openEdit(rep)} aria-label="Edit card" className="text-muted-foreground hover:text-foreground"><Pencil className="h-4 w-4" /></button>
                           <button onClick={() => removeNote(ids)} aria-label="Delete card" className="text-destructive"><Trash2 className="h-4 w-4" /></button>
                         </div>
-                      </div>
+                      </motion.div>
                     );
                   })}
                 </div>
@@ -622,6 +648,9 @@ function DeckSettings({
   const [color, setColor] = useState<string>(deck.color ?? "violet");
   const [saving, setSaving] = useState(false);
   const [savedTick, setSavedTick] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   async function save() {
     if (!title.trim()) return;
@@ -636,10 +665,15 @@ function DeckSettings({
     }
   }
 
-  async function removeDeck() {
-    if (!window.confirm(`Delete deck "${deck.title}" and all its cards? This cannot be undone.`)) return;
-    await deleteDeck(deck.id);
-    onDeleted();
+  async function confirmDelete() {
+    if (confirmText !== deck.title) return;
+    setDeleting(true);
+    try {
+      await deleteDeck(deck.id);
+      onDeleted();
+    } finally {
+      setDeleting(false);
+    }
   }
 
   return (
@@ -692,7 +726,7 @@ function DeckSettings({
         </div>
         <div className="space-y-1.5">
           <p className="label-mono">Icon</p>
-          <div className="grid grid-cols-6 gap-2 sm:grid-cols-8">
+          <div className="flex flex-wrap gap-1.5">
             {DECK_ICON_KEYS.map((key) => {
               const Ico = deckIconFor(key);
               const active = icon === key;
@@ -703,10 +737,10 @@ function DeckSettings({
                   onClick={() => setIcon(active ? null : key)}
                   aria-label={`Icon ${key}`}
                   aria-pressed={active}
-                  className={cn("flex aspect-square items-center justify-center rounded-xl border transition-all",
+                  className={cn("flex h-11 w-11 items-center justify-center rounded-lg border transition-all",
                     active ? "border-primary bg-primary/15 text-primary" : "border-border/50 text-muted-foreground hover:border-primary/40 hover:bg-accent hover:text-foreground")}
                 >
-                  <Ico className="h-[18px] w-[18px]" />
+                  <Ico className="h-6 w-6" />
                 </button>
               );
             })}
@@ -720,10 +754,46 @@ function DeckSettings({
         </Button>
         <Button variant="outline" onClick={onManageCards} className="rounded-xl">Manage cards</Button>
         <div className="flex-1" />
-        <Button variant="ghost" onClick={removeDeck} className="gap-1.5 rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive">
+        <Button variant="ghost" onClick={() => { setConfirmText(""); setConfirmOpen(true); }} className="gap-1.5 rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive">
           <Trash2 className="h-4 w-4" /> Delete deck
         </Button>
       </div>
+
+      {/* Type-to-confirm deletion (replaces the native browser confirm). */}
+      <Dialog open={confirmOpen} onOpenChange={(o) => { setConfirmOpen(o); if (!o) setConfirmText(""); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete deck?</DialogTitle>
+            <DialogDescription>
+              This permanently deletes the deck and all of its cards. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Type <span className="font-semibold text-foreground">{deck.title}</span> to confirm deletion.
+            </p>
+            <input
+              autoFocus
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              aria-label="Type the deck name to confirm deletion"
+              placeholder={deck.title}
+              className="h-11 w-full rounded-xl border border-input bg-background/60 px-3 text-sm outline-none focus-visible:border-destructive/60 focus-visible:ring-4 focus-visible:ring-destructive/15"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => { setConfirmOpen(false); setConfirmText(""); }}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={confirmText !== deck.title || deleting}
+              className="gap-1.5 rounded-xl"
+            >
+              {deleting ? <><Loader2 className="h-4 w-4 animate-spin" /> Deleting…</> : <><Trash2 className="h-4 w-4" /> Delete deck</>}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

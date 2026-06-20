@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 export function LandingFooter() {
   return (
     <footer className="border-t border-border/40">
@@ -5,10 +7,20 @@ export function LandingFooter() {
         <p className="text-sm text-muted-foreground">
           © 2026 USki. All rights reserved.
         </p>
-        <div className="flex gap-4 text-sm text-muted-foreground">
-          <a href="#" className="hover:text-foreground transition-colors">Privacy</a>
-          <a href="#" className="hover:text-foreground transition-colors">Imprint</a>
-        </div>
+        <nav className="flex gap-4 text-sm text-muted-foreground" aria-label="Legal">
+          <Link
+            to="/privacy"
+            className="transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+          >
+            Privacy
+          </Link>
+          <Link
+            to="/legal"
+            className="transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+          >
+            Legal Notice
+          </Link>
+        </nav>
       </div>
     </footer>
   );
