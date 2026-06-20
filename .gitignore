@@ -3,8 +3,16 @@ __pycache__/
 .venv/
 venv/
 .env
+ai_providers.json
 node_modules/
 dist/
 *.egg-info/
 .pytest_cache/
 .coverage
+
+# Local tooling / test artifacts
+.playwright-cli/
+.playwright-mcp/
+.kiro/settings/
+*.local.json
+landing-after-rebuild.jpeg

@@ -1,0 +1,23 @@
+{
+  "_comment": "PROD only. Copy to ai_providers.json and fill in real keys. The backend round-robins chat traffic across these OpenAI-compatible endpoints so several free-tier keys/limits add up and run in parallel. Ignored in dev (dev uses local Ollama). Path is set via AI_PROVIDERS_FILE.",
+  "chat_providers": [
+    {
+      "name": "groq",
+      "base_url": "https://api.groq.com/openai/v1",
+      "api_key": "gsk_REPLACE_ME",
+      "model": "llama-3.3-70b-versatile"
+    },
+    {
+      "name": "gemini",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "api_key": "AIza_REPLACE_ME",
+      "model": "gemini-2.0-flash"
+    },
+    {
+      "name": "openrouter",
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key": "sk-or-REPLACE_ME",
+      "model": "meta-llama/llama-3.3-70b-instruct:free"
+    }
+  ]
+}

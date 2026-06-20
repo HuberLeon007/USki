@@ -10,6 +10,7 @@ from fastapi import Depends
 
 from uski.repos.decks import DeckRepo, SupabaseDeckRepo
 from uski.repos.cards import CardRepo, SupabaseCardRepo
+from uski.repos.images import ImageRepo, SupabaseImageRepo
 from uski.repos.groups import GroupRepo, SupabaseGroupRepo
 from uski.repos.schedules import ScheduleRepo, SupabaseScheduleRepo
 from uski.repos.chunks import ChunkRepo, SupabaseChunkRepo
@@ -27,6 +28,10 @@ def get_deck_repo() -> DeckRepo:
 
 def get_card_repo() -> CardRepo:
     return SupabaseCardRepo()
+
+
+def get_image_repo() -> ImageRepo:
+    return SupabaseImageRepo()
 
 
 def get_group_repo() -> GroupRepo:
@@ -67,6 +72,7 @@ def get_user_repo() -> UserRepo:
 
 DeckRepoDep = Annotated[DeckRepo, Depends(get_deck_repo)]
 CardRepoDep = Annotated[CardRepo, Depends(get_card_repo)]
+ImageRepoDep = Annotated[ImageRepo, Depends(get_image_repo)]
 GroupRepoDep = Annotated[GroupRepo, Depends(get_group_repo)]
 ScheduleRepoDep = Annotated[ScheduleRepo, Depends(get_schedule_repo)]
 ChunkRepoDep = Annotated[ChunkRepo, Depends(get_chunk_repo)]

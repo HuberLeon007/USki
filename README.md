@@ -6,7 +6,28 @@ USki ist eine intelligente, containerisierte Flashcard-App, die den modernen **F
 
 ---
 
-## 🛠 Tech-Stack
+## 🚀 Dev-Start (alles lokal)
+
+Vollständige Anleitung: **[STARTUP.md](STARTUP.md)**
+
+**Kurzfassung:**
+
+```bash
+# 1. Supabase starten (Keys in .env eintragen)
+supabase start && supabase migration up
+
+# 2. Docker mit Ollama + Redis — IMMER --profile dev!
+docker compose --profile dev up --build   # Erststart (zieht Modelle ~2 GB)
+docker compose --profile dev up           # danach täglich
+docker compose --profile dev restart      # schneller Neustart
+
+# Ports: Frontend :5173 · Backend :8000 · Ollama :11434 · Redis :6379
+# OTP-Mails (dev): http://localhost:54324
+```
+
+> **Ohne `--profile dev`** starten Ollama und Redis **nicht** — nur Backend + Frontend.
+
+---
 
 - **Frontend**: React Router, TypeScript, Tailwind CSS, shadcn UI
 - **Backend**: Python, FastAPI, Pydantic, Loguru

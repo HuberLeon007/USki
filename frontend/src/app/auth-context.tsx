@@ -38,6 +38,13 @@ interface AuthContextValue extends AuthState {
    */
   endSession: () => void;
   setNeedsUsername: (value: boolean) => void;
+  /**
+   * Re-fetches the full profile (`getMe`) and merges it into state. Needed
+   * right after login: `setSession` only knows the id/email from the auth
+   * response, so the username/discriminator must be hydrated separately or the
+   * sidebar shows its loading placeholder until a manual reload.
+   */
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -143,9 +150,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, needsUsername: value }));
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    if (!tokenStorage.getAccess()) return;
+    try {
+      const user = await getMe();
+      setState((s) => ({ ...s, user, needsUsername: !user.has_username }));
+    } catch {
+      /* session-expiry handled by callers / apiFetch */
+    }
+  }, []);
+
   const value = useMemo(
-    () => ({ ...state, setSession, clearSession, endSession, setNeedsUsername }),
-    [state, setSession, clearSession, endSession, setNeedsUsername],
+    () => ({ ...state, setSession, clearSession, endSession, setNeedsUsername, refreshUser }),
+    [state, setSession, clearSession, endSession, setNeedsUsername, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

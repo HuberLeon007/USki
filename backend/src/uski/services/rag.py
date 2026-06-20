@@ -10,9 +10,10 @@ from uski.repos.chunks import ChunkRepo
 from uski.services.embeddings import Embedder
 
 _BASE = (
-    "Du bist USki, ein intelligenter Lern-Assistent. Antworte kurz, praezise und auf Deutsch. "
-    "Nutze den folgenden Kontext aus den Karteikarten des Nutzers, wenn er relevant ist. "
-    "Wenn der Kontext nicht reicht, sage es ehrlich."
+    "You are Sero, the friendly study assistant for USki. Reply in English by default, "
+    "keep it short and precise, in plain text (no markdown, no bold). "
+    "Use the following context from the user's flashcards when it is relevant. "
+    "If the context is not enough, say so honestly."
 )
 
 
@@ -33,4 +34,4 @@ def build_system_prompt(contexts: list[str]) -> str:
     if not contexts:
         return _BASE
     joined = "\n---\n".join(contexts)
-    return f"{_BASE}\n\nKontext:\n{joined}"
+    return f"{_BASE}\n\nContext:\n{joined}"

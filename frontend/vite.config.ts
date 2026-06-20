@@ -13,6 +13,9 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       host: "0.0.0.0",
+      // In Docker on Windows/macOS, host file edits don't emit inotify events
+      // inside the Linux container, so HMR never fires. Poll instead.
+      watch: isDocker ? { usePolling: true, interval: 200 } : undefined,
       proxy: {
         "/api": {
           target: env.VITE_API_PROXY_TARGET || "http://localhost:8000",

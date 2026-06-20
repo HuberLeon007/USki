@@ -33,6 +33,8 @@ class DeckCreate(BaseModel):
     description: str = ""
     group_id: str | None = None
     card_template: str = "default"
+    icon: str | None = None
+    color: str | None = None
 
 
 class DeckUpdate(BaseModel):
@@ -40,6 +42,9 @@ class DeckUpdate(BaseModel):
     description: str | None = None
     group_id: str | None = None
     card_template: str | None = None
+    custom_study_updates: bool | None = None
+    icon: str | None = None
+    color: str | None = None
 
 
 class DeckOut(BaseModel):
@@ -49,5 +54,8 @@ class DeckOut(BaseModel):
     title: str
     description: str = ""
     card_template: str = "default"
+    custom_study_updates: bool = False
+    icon: str | None = None
+    color: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None

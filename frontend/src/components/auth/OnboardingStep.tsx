@@ -44,7 +44,7 @@ interface OnboardingStepProps {
  * we then route the user back to the Login email step via `endSession()` (R1.3).
  */
 export function OnboardingStep({ open, onOpenChange }: OnboardingStepProps) {
-  const { user, setNeedsUsername, endSession } = useAuth();
+  const { user, setNeedsUsername, endSession, refreshUser } = useAuth();
   const [username, setUsernameValue] = useState("");
   const [suggestion, setSuggestion] = useState("");
   const [loading, setLoading] = useState(false);
@@ -99,6 +99,7 @@ export function OnboardingStep({ open, onOpenChange }: OnboardingStepProps) {
       // Username assigned → needs_username becomes false → onboarding is never
       // shown again (R8.4).
       setNeedsUsername(false);
+      await refreshUser();
       onOpenChange(false);
     } catch (err) {
       if (err instanceof SessionExpiredError) {
@@ -130,6 +131,7 @@ export function OnboardingStep({ open, onOpenChange }: OnboardingStepProps) {
       const derived = deriveUsernameFromEmail(user.email);
       await setUsername(derived);
       setNeedsUsername(false);
+      await refreshUser();
       onOpenChange(false);
     } catch (err) {
       if (err instanceof SessionExpiredError) {
@@ -155,7 +157,9 @@ export function OnboardingStep({ open, onOpenChange }: OnboardingStepProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="overflow-hidden border-border/70 bg-card/95 p-0 backdrop-blur-xl sm:max-w-md"
+        showCloseButton={false}
         onPointerDownOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
       >
         {/* Agent greeting header */}
         <DialogHeader className="space-y-0 px-7 pt-7 text-left">

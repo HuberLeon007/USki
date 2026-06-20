@@ -185,6 +185,7 @@ class InMemoryNotificationRepo:
 # ── user lookup (friend finding by username#discriminator) ───
 class UserRepo(Protocol):
     def find_by_handle(self, username: str, discriminator: str) -> str | None: ...
+    def get_handle(self, user_id: str) -> str | None: ...
 
 
 class SupabaseUserRepo:
@@ -198,6 +199,13 @@ class SupabaseUserRepo:
         )
         return res.data[0]["id"] if res.data else None
 
+    def get_handle(self, user_id):
+        res = self._db.table("user").select("username,discriminator").eq("id", user_id).execute()
+        if not res.data:
+            return None
+        r = res.data[0]
+        return f"{r['username']}#{r['discriminator']}" if r.get("username") else None
+
 
 class InMemoryUserRepo:
     def __init__(self, handles: dict[tuple[str, str], str] | None = None):
@@ -205,3 +213,9 @@ class InMemoryUserRepo:
 
     def find_by_handle(self, username, discriminator):
         return self._h.get((username, discriminator))
+
+    def get_handle(self, user_id):
+        for (u, d), uid in self._h.items():
+            if uid == user_id:
+                return f"{u}#{d}"
+        return None

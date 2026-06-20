@@ -71,7 +71,7 @@ export function OtpStep({
   // while preserving ordering — callbacks still fire so the sequence completes.
   const dur = reduce
     ? { green: 0.01, spinner: 0.01, check: 0.01, transition: 0.01 }
-    : { green: 0.1, spinner: 0.9, check: 0.5, transition: 0.35 };
+    : { green: 0.35, spinner: 0.9, check: 0.5, transition: 0.45 };
 
   // R6.1/R6.2/R6.3: tick the countdown down to zero, then stop.
   useEffect(() => {
@@ -202,8 +202,14 @@ export function OtpStep({
       </div>
 
       {/* Success animation sequence (R7.1–R7.5). Each stage advances on
-          onAnimationComplete, never on a timer racing the UI. */}
-      <div className="flex h-12 items-center justify-center text-emerald-400">
+          onAnimationComplete, never on a timer racing the UI. The reserved
+          height collapses while idle so there's no large empty gap. */}
+      <div
+        className={cn(
+          "flex items-center justify-center gap-2 text-emerald-400 transition-[height] duration-200",
+          phase === "idle" ? "h-1" : "h-10",
+        )}
+      >
         {inSuccess ? (
           <>
             {/* R7.1: green confirmation; advance to the single spinner. */}
@@ -269,6 +275,16 @@ export function OtpStep({
             )}
 
             {/* R7.4/R7.5: the step transition; only now is navigation released. */}
+            {(phase === "checkmark" || phase === "transition") && (
+              <motion.span
+                initial={{ opacity: 0, x: -4 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.25 }}
+                className="text-sm font-medium text-emerald-400"
+              >
+                Success! Redirecting…
+              </motion.span>
+            )}
             {phase === "transition" && (
               <motion.span
                 key="transition-driver"

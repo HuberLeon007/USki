@@ -36,7 +36,7 @@
   /* FSRS state accents — semantic, used as data colors */
   --color-state-new: hsl(199 89% 48%);
   --color-state-learn: hsl(38 92% 50%);
-  --color-state-due: hsl(263 70% 55%);
+  --color-state-due: hsl(142 71% 40%);
 
   --radius: 0.75rem;
 }
@@ -67,7 +67,7 @@
 
   --color-state-new: hsl(199 89% 62%);
   --color-state-learn: hsl(38 95% 62%);
-  --color-state-due: hsl(263 70% 66%);
+  --color-state-due: hsl(142 65% 52%);
 }
 
 @layer base {
@@ -135,3 +135,44 @@
 .prose-card :where(pre) { background: var(--color-muted); border-radius: 0.5rem; padding: 0.6rem 0.8rem; overflow-x: auto; }
 .prose-card :where(blockquote) { border-left: 3px solid var(--color-border); padding-left: 0.75rem; color: var(--color-muted-foreground); }
 .prose-card:empty::before { content: ""; }
+
+/* ── Modern scrollbars ──────────────────────────────────────────────
+   Thin, rounded, translucent thumb that darkens on hover. Track is
+   invisible. Applies app-wide (Firefox + WebKit/Chromium). */
+:root {
+  --scrollbar-thumb: hsl(250 10% 55% / 0.38);
+  --scrollbar-thumb-hover: hsl(263 50% 55% / 0.65);
+}
+.dark {
+  --scrollbar-thumb: hsl(250 10% 70% / 0.28);
+  --scrollbar-thumb-hover: hsl(263 70% 70% / 0.6);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+/* WebKit / Chromium / Edge */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.2s ease;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}

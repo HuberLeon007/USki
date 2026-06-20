@@ -21,6 +21,7 @@ _TABLE = "deck"
 class DeckRepo(Protocol):
     def list_for(self, owner_id: str) -> list[DeckOut]: ...
     def get(self, deck_id: str) -> DeckOut | None: ...
+    def find_by_title(self, owner_id: str, title: str) -> DeckOut | None: ...
     def create(self, owner_id: str, data: DeckCreate) -> DeckOut: ...
     def update(self, deck_id: str, patch: dict) -> DeckOut: ...
     def delete(self, deck_id: str) -> None: ...
@@ -44,6 +45,13 @@ class SupabaseDeckRepo:
 
     def get(self, deck_id: str) -> DeckOut | None:
         res = self._db.table(_TABLE).select("*").eq("id", deck_id).execute()
+        return DeckOut(**res.data[0]) if res.data else None
+
+    def find_by_title(self, owner_id: str, title: str) -> DeckOut | None:
+        res = (
+            self._db.table(_TABLE).select("*")
+            .eq("owner_id", owner_id).eq("title", title).limit(1).execute()
+        )
         return DeckOut(**res.data[0]) if res.data else None
 
     def create(self, owner_id: str, data: DeckCreate) -> DeckOut:
@@ -70,6 +78,12 @@ class InMemoryDeckRepo:
 
     def get(self, deck_id: str) -> DeckOut | None:
         return self._rows.get(deck_id)
+
+    def find_by_title(self, owner_id: str, title: str) -> DeckOut | None:
+        for d in self._rows.values():
+            if d.owner_id == owner_id and d.title == title:
+                return d
+        return None
 
     def create(self, owner_id: str, data: DeckCreate) -> DeckOut:
         now = datetime.now(timezone.utc)

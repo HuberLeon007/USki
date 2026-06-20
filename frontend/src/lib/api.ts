@@ -285,6 +285,9 @@ export interface Deck {
   title: string;
   description: string;
   card_template: string;
+  custom_study_updates?: boolean;
+  icon?: string | null;
+  color?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -297,6 +300,8 @@ export interface DeckGroup {
   position: number;
 }
 
+export type CardType = "basic" | "reverse";
+
 export interface Card {
   id: string;
   deck_id: string;
@@ -305,6 +310,10 @@ export interface Card {
   back_json: Record<string, unknown>;
   back_html: string;
   position: number;
+  card_type: CardType;
+  note_id: string | null;
+  group_label: string | null;
+  group_color: string | null;
 }
 
 export type ReviewRating = "again" | "hard" | "good" | "easy";
@@ -330,12 +339,25 @@ const authed = { requireAuth: true } as const;
 export const listDecks = () => apiFetch<Deck[]>("/decks", {}, authed);
 export const listSharedDecks = () => apiFetch<Deck[]>("/decks/shared", {}, authed);
 export const getDeck = (id: string) => apiFetch<Deck>(`/decks/${id}`, {}, authed);
-export const createDeck = (data: { title: string; description?: string; group_id?: string | null }) =>
+export const createDeck = (data: { title: string; description?: string; group_id?: string | null; icon?: string | null; color?: string | null }) =>
   apiFetch<Deck>("/decks", { method: "POST", body: JSON.stringify(data) }, authed);
-export const updateDeck = (id: string, patch: Partial<Pick<Deck, "title" | "description" | "group_id">>) =>
+export const updateDeck = (id: string, patch: Partial<Pick<Deck, "title" | "description" | "group_id" | "icon" | "color">>) =>
   apiFetch<Deck>(`/decks/${id}`, { method: "PATCH", body: JSON.stringify(patch) }, authed);
 export const deleteDeck = (id: string) =>
   apiFetch<void>(`/decks/${id}`, { method: "DELETE" }, authed);
+
+export interface DeckAccess {
+  permission: Permission;
+  is_owner: boolean;
+  owner: string | null;
+  granted_by: string | null;
+}
+/** Clone a readable (e.g. shared) deck into the user's own decks. */
+export const importDeck = (id: string) =>
+  apiFetch<Deck>(`/decks/${id}/import`, { method: "POST" }, authed);
+/** What access the current user has on a deck, and from whom. */
+export const getDeckAccess = (id: string) =>
+  apiFetch<DeckAccess>(`/decks/${id}/access`, {}, authed);
 
 // groups
 export const listGroups = () => apiFetch<DeckGroup[]>("/groups", {}, authed);
@@ -349,16 +371,34 @@ export const listCards = (deckId: string) =>
   apiFetch<Card[]>(`/decks/${deckId}/cards`, {}, authed);
 export const createCard = (
   deckId: string,
-  data: { front_json?: object; front_html: string; back_json?: object; back_html: string },
+  data: {
+    front_json?: object; front_html: string; back_json?: object; back_html: string;
+    card_type?: CardType; make_reverse?: boolean; note_id?: string | null;
+    group_label?: string | null; group_color?: string | null; position?: number;
+  },
 ) => apiFetch<Card>(`/decks/${deckId}/cards`, { method: "POST", body: JSON.stringify(data) }, authed);
 export const updateCard = (deckId: string, cardId: string, patch: Partial<Card>) =>
   apiFetch<Card>(`/decks/${deckId}/cards/${cardId}`, { method: "PATCH", body: JSON.stringify(patch) }, authed);
 export const deleteCard = (deckId: string, cardId: string) =>
   apiFetch<void>(`/decks/${deckId}/cards/${cardId}`, { method: "DELETE" }, authed);
+/** Toggle whether a card is studied in both directions (links/removes a reverse sibling). */
+export const setBidirectional = (deckId: string, cardId: string, enabled: boolean) =>
+  apiFetch<Card>(`/decks/${deckId}/cards/${cardId}/bidirectional`, { method: "POST", body: JSON.stringify({ enabled }) }, authed);
+/** Persist new study order (top->bottom) for a deck's cards. */
+export const reorderCards = (deckId: string, orderedIds: string[]) =>
+  apiFetch<void>(`/decks/${deckId}/cards/reorder`, { method: "PATCH", body: JSON.stringify({ ordered_ids: orderedIds }) }, authed);
 
 // review
+export interface ReviewStats { new: number; learning: number; due: number; done: number; total: number; }
+export interface IntervalPreview { again: string; hard: string; good: string; easy: string; }
 export const dueCards = (deckId: string) =>
   apiFetch<Card[]>(`/decks/${deckId}/review/due`, {}, authed);
+export const reviewStats = (deckId: string) =>
+  apiFetch<ReviewStats>(`/decks/${deckId}/review/stats`, {}, authed);
+export const cardIntervals = (deckId: string, cardId: string) =>
+  apiFetch<IntervalPreview>(`/decks/${deckId}/review/${cardId}/intervals`, {}, authed);
+export const customStudy = (deckId: string, mode: "all" | "ahead", days = 0) =>
+  apiFetch<Card[]>(`/decks/${deckId}/review/custom?mode=${mode}&days=${days}`, {}, authed);
 export const rateCard = (deckId: string, cardId: string, rating: ReviewRating) =>
   apiFetch<{ card_id: string; due: string; state: number }>(
     `/decks/${deckId}/review/${cardId}`,
@@ -375,6 +415,20 @@ export const grantShare = (
 ) => apiFetch<Share>(`/decks/${deckId}/shares`, { method: "POST", body: JSON.stringify(data) }, authed);
 export const revokeShare = (deckId: string, granteeId: string) =>
   apiFetch<void>(`/decks/${deckId}/shares/${granteeId}`, { method: "DELETE" }, authed);
+
+/** Grants the current user has made on their own decks (Shared overview). */
+export interface OutgoingShare {
+  deck_id: string;
+  deck_title: string;
+  grantee_id: string;
+  grantee: string | null;
+  permission: Permission;
+}
+export const outgoingShares = () =>
+  apiFetch<OutgoingShare[]>("/shares/outgoing", {}, authed);
+/** Current user removes their OWN access to a deck shared with them (one-time, final). */
+export const leaveSharedDeck = (deckId: string) =>
+  apiFetch<void>(`/shares/incoming/${deckId}`, { method: "DELETE" }, authed);
 export const createInvite = (deckId: string, permission: Permission) =>
   apiFetch<{ code: string; deck_id: string; permission: Permission }>(
     `/decks/${deckId}/invites`,
@@ -398,6 +452,49 @@ export const changeUsernameFull = (username: string, discriminator?: string) =>
     authed,
   );
 
+// images
+export interface ImageUploadResult { url: string; sha256: string; bytes: number; width: number; height: number; deduped: boolean; }
+export interface StorageUsage { used_bytes: number; quota_bytes: number; }
+/** Upload an inline card image (multipart). Backend downscales + dedups. */
+export async function uploadImage(file: File): Promise<ImageUploadResult> {
+  const token = tokenStorage.getAccess();
+  if (!token) { tokenStorage.clear(); throw new SessionExpiredError("Missing access token"); }
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_BASE}/images`, {
+    method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, (body as Record<string, string>).detail || `Upload failed (${res.status})`);
+  }
+  return (await res.json()) as ImageUploadResult;
+}
+export const storageUsage = () => apiFetch<StorageUsage>("/images/usage", {}, authed);
+
+// browse (all cards across the user's decks)
+export interface BrowseCard extends Card { deck_title: string; }
+export const browseCards = () => apiFetch<BrowseCard[]>("/browse/cards", {}, authed);
+
+// import a deck from an uploaded file (apkg / csv / txt)
+export interface ImportResult { deck_id: string; title: string; imported: number; }
+export async function importDeckFile(file: File, title: string, delimiter: string): Promise<ImportResult> {
+  const token = tokenStorage.getAccess();
+  if (!token) { tokenStorage.clear(); throw new SessionExpiredError("Missing access token"); }
+  const form = new FormData();
+  form.append("file", file);
+  form.append("title", title);
+  form.append("delimiter", delimiter);
+  const res = await fetch(`${API_BASE}/import/deck`, {
+    method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, (body as Record<string, string>).detail || `Import failed (${res.status})`);
+  }
+  return (await res.json()) as ImportResult;
+}
+
 // chat (RAG when deckId is given)
 export interface ChatApiMessage {
   role: "system" | "user" | "assistant";
@@ -409,3 +506,72 @@ export const sendChat = (messages: ChatApiMessage[], deckId?: string | null) =>
     { method: "POST", body: JSON.stringify({ messages, deck_id: deckId ?? null }) },
     authed,
   );
+
+export interface ChatStreamHandlers {
+  onStatus?: (text: string) => void;
+  onDelta?: (text: string) => void;
+  onDone?: () => void;
+  onError?: (message?: string) => void;
+}
+
+/**
+ * Stream a chat reply via SSE so the UI can render tokens live and show what
+ * the assistant is doing (e.g. "Reading through <deck>"). Falls back to onError
+ * when the stream can't be opened.
+ */
+export async function sendChatStream(
+  messages: ChatApiMessage[],
+  deckId: string | null | undefined,
+  handlers: ChatStreamHandlers,
+): Promise<void> {
+  const token = tokenStorage.getAccess();
+  if (!token) { tokenStorage.clear(); handlers.onError?.("Session expired"); return; }
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/chat/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ messages, deck_id: deckId ?? null }),
+    });
+  } catch {
+    handlers.onError?.();
+    return;
+  }
+  if (!res.ok || !res.body) { handlers.onError?.(); return; }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let finished = false;
+  const finish = () => { if (!finished) { finished = true; handlers.onDone?.(); } };
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const frames = buf.split("\n\n");
+      buf = frames.pop() ?? "";
+      for (const frame of frames) {
+        const line = frame.trim();
+        if (!line.startsWith("data:")) continue;
+        const payload = line.slice(5).trim();
+        if (!payload) continue;
+        try {
+          const evt = JSON.parse(payload) as { type: string; text?: string };
+          if (evt.type === "status") handlers.onStatus?.(evt.text ?? "");
+          else if (evt.type === "delta") handlers.onDelta?.(evt.text ?? "");
+          else if (evt.type === "done") finish();
+          else if (evt.type === "error") { handlers.onError?.(evt.text); finished = true; return; }
+        } catch { /* ignore malformed frame */ }
+      }
+    }
+  } catch {
+    handlers.onError?.();
+    return;
+  }
+  finish();
+}
+
+// dev-only: wipe the whole database (deletes all auth users → cascades). 404 in prod.
+export const wipeDatabaseDev = () =>
+  apiFetch<{ ok: boolean; deleted_users: number }>("/dev/wipe", { method: "POST" });

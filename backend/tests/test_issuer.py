@@ -27,6 +27,7 @@ class TestAllowedIssuers:
         s = Settings(
             APP_MODE="prod",
             SUPABASE_URL="https://abc.supabase.co",
+            SUPABASE_PUBLIC_URL="",  # explicit: isolate from any ambient env
             SUPABASE_ANON_KEY="x",
             SUPABASE_SERVICE_ROLE_KEY="y",
         )

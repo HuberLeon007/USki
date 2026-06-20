@@ -14,6 +14,7 @@ _TABLE = "card"
 
 class CardRepo(Protocol):
     def list_for_deck(self, deck_id: str) -> list[CardOut]: ...
+    def list_for_note(self, note_id: str) -> list[CardOut]: ...
     def get(self, card_id: str) -> CardOut | None: ...
     def create(self, deck_id: str, data: dict) -> CardOut: ...
     def update(self, card_id: str, patch: dict) -> CardOut: ...
@@ -28,6 +29,10 @@ class SupabaseCardRepo:
         res = (
             self._db.table(_TABLE).select("*").eq("deck_id", deck_id).order("position").execute()
         )
+        return [CardOut(**row) for row in res.data]
+
+    def list_for_note(self, note_id: str) -> list[CardOut]:
+        res = self._db.table(_TABLE).select("*").eq("note_id", note_id).execute()
         return [CardOut(**row) for row in res.data]
 
     def get(self, card_id: str) -> CardOut | None:
@@ -53,6 +58,9 @@ class InMemoryCardRepo:
     def list_for_deck(self, deck_id: str) -> list[CardOut]:
         items = [c for c in self._rows.values() if c.deck_id == deck_id]
         return sorted(items, key=lambda c: c.position)
+
+    def list_for_note(self, note_id: str) -> list[CardOut]:
+        return [c for c in self._rows.values() if getattr(c, "note_id", None) == note_id]
 
     def get(self, card_id: str) -> CardOut | None:
         return self._rows.get(card_id)

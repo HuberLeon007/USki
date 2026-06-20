@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from loguru import logger
+from pydantic import BaseModel
 
 from uski.core.deps import (
     AuditRepoDep, DeckRepoDep, InviteRepoDep, NotificationRepoDep, ShareRepoDep, UserRepoDep,
@@ -13,6 +14,15 @@ from uski.schemas.sharing import (
 from uski.services.permissions import Permission, effective_permission, require_permission
 
 router = APIRouter(prefix="/api", tags=["sharing"])
+
+
+class OutgoingShareOut(BaseModel):
+    """A grant the current user has made on one of their own decks."""
+    deck_id: str
+    deck_title: str
+    grantee_id: str
+    grantee: str | None = None
+    permission: str
 
 
 def _require_share(deck_repo, share_repo, deck_id, user_id):
@@ -30,6 +40,35 @@ async def list_shares(
 ):
     _require_share(deck_repo, share_repo, deck_id, user.id)
     return share_repo.list_for_deck(deck_id)
+
+
+@router.get("/shares/outgoing", response_model=list[OutgoingShareOut])
+async def outgoing_shares(
+    deck_repo: DeckRepoDep, share_repo: ShareRepoDep, user_repo: UserRepoDep,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Every grant the current user has made on decks they own (for the Shared overview)."""
+    out: list[OutgoingShareOut] = []
+    for deck in deck_repo.list_for(user.id):
+        for s in share_repo.list_for_deck(deck.id):
+            out.append(OutgoingShareOut(
+                deck_id=deck.id,
+                deck_title=deck.title,
+                grantee_id=s["grantee_id"],
+                grantee=user_repo.get_handle(s["grantee_id"]),
+                permission=s["permission"],
+            ))
+    return out
+
+
+@router.delete("/shares/incoming/{deck_id}", status_code=204)
+async def leave_shared_deck(
+    deck_id: str, share_repo: ShareRepoDep,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """The current user removes their OWN access to a deck shared with them.
+    One-time and final: a new share would have to be granted again."""
+    share_repo.revoke(deck_id, user.id)
 
 
 @router.post("/decks/{deck_id}/shares", response_model=ShareOut, status_code=201)

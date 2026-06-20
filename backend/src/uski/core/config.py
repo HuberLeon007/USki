@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     AI_BASE_URL: str = ""
     AI_API_KEY: str = ""
     AI_MODEL: str = ""
+    AI_EMBED_MODEL: str = "nomic-embed-text"
+    # PROD only: path to a JSON pool of chat providers to load-balance across
+    # (round-robin), so multiple free API keys/endpoints are used in parallel.
+    # Ignored in dev (dev always uses the local Ollama from AI_BASE_URL). See
+    # ai_providers.example.json. Empty → falls back to AI_BASE_URL/AI_MODEL.
+    AI_PROVIDERS_FILE: str = "ai_providers.json"
 
     # Rate Limiting
     RATE_LIMIT_REDIS_URL: str = "redis://localhost:6379"
@@ -67,6 +73,11 @@ class Settings(BaseSettings):
     @property
     def is_dev(self) -> bool:
         return self.APP_MODE == "dev"
+
+    @property
+    def storage_public_base(self) -> str:
+        """Browser-facing base URL for public Storage objects (dev: 127.0.0.1)."""
+        return (self.SUPABASE_PUBLIC_URL or self.SUPABASE_URL).rstrip("/")
 
     @property
     def ai_base_url_resolved(self) -> str:

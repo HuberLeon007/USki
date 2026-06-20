@@ -29,7 +29,7 @@ export function CTASection() {
             className="bg-primary text-primary-foreground hover:bg-primary/90 px-8"
           >
             <Link to="/login">
-              Get started free
+              Get started for free
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>

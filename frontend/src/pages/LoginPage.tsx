@@ -26,6 +26,9 @@ export default function LoginPage() {
   // OTP verification status drives the OtpStep success-animation phase machine (R7).
   const [otpStatus, setOtpStatus] = useState<OtpStatus>("idle");
   const [otpErrorKind, setOtpErrorKind] = useState<OtpErrorKind>(null);
+  // Verified tokens, held until the success animation finishes (so the auth
+  // state flip does not trigger an instant redirect before the animation plays).
+  const [pending, setPending] = useState<Awaited<ReturnType<typeof verifyOtp>> | null>(null);
 
   const otpBusy = otpStatus === "verifying" || otpStatus === "verified";
 
@@ -51,16 +54,10 @@ export default function LoginPage() {
     setOtpStatus("verifying");
     try {
       const result = await verifyOtp(email, code);
-      // Persist tokens synchronously before showing the success animation (R7.5 / R1.1).
-      setSession(
-        result.access_token,
-        result.refresh_token,
-        result.user_id,
-        result.email,
-        result.needs_username,
-      );
-      // Hand off to OtpStep — navigation is gated on onSuccessComplete (R7.4/R7.5),
-      // it must NOT happen here before the animation sequence finishes.
+      // Hold the tokens — do NOT authenticate yet. Authenticating now would flip
+      // the app to a signed-in state and redirect instantly, skipping the success
+      // animation. We persist the session only in onSuccessComplete (R7.4/R7.5).
+      setPending(result);
       setOtpStatus("verified");
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
@@ -78,6 +75,15 @@ export default function LoginPage() {
 
   // Invoked by OtpStep only after green → spinner → checkmark → transition completes (R7.4/R7.5).
   function handleSuccessComplete() {
+    if (pending) {
+      setSession(
+        pending.access_token,
+        pending.refresh_token,
+        pending.user_id,
+        pending.email,
+        pending.needs_username,
+      );
+    }
     navigate("/dashboard", { replace: true });
   }
 
@@ -108,16 +114,16 @@ export default function LoginPage() {
         initial={reduce ? false : { opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="relative z-10 w-full max-w-[26rem]"
+        className="relative z-10 w-full max-w-[28rem]"
       >
         <div className="mb-8 flex flex-col items-center gap-5 text-center">
           <Link to="/" aria-label="USki home">
-            <Logo imgClassName="h-16 w-16" textClassName="text-3xl" />
+            <Logo imgClassName="h-20 w-20" textClassName="text-4xl" />
           </Link>
         </div>
 
         {/* Auth surface — a single raised card, the focal layer of the stack */}
-        <div className="rounded-2xl border border-border/70 bg-card/80 p-7 backdrop-blur-xl stack-glow sm:p-8">
+        <div className="rounded-2xl border border-border/70 bg-card/80 p-8 backdrop-blur-xl stack-glow sm:p-9">
           <div className="mb-6 space-y-1.5">
             <AnimatePresence mode="wait">
               <motion.div

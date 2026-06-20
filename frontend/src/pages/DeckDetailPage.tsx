@@ -1,31 +1,80 @@
-import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Play, Share2, Plus, Pencil, Trash2, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import {
+  ArrowLeft, Play, Share2, Plus, Pencil, Trash2, Loader2, GripVertical, Settings2, Image as ImageIcon, Check, ArrowLeftRight,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { RichTextEditor, RichTextView } from "@/components/editor/RichTextEditor";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  RichTextProvider, RichTextToolbar, RichTextField,
+} from "@/components/editor/RichTextEditor";
 import { ReviewSession } from "@/components/review/ReviewSession";
 import { ShareDialog } from "@/components/decks/ShareDialog";
+import { AssistantBubble } from "@/components/dashboard/assistant/AssistantBubble";
+import { SelectMenu } from "@/components/ui/select-menu";
+import { cn } from "@/lib/utils";
 import {
-  listCards, createCard, updateCard, deleteCard, getDeck, updateDeck, listGroups,
-  type Card, type Deck, type DeckGroup,
+  DECK_ICON_KEYS, deckIconFor, DECK_COLOR_KEYS, deckColorFor, DeckBadge,
+} from "@/lib/deck-icons";
+import {
+  listCards, createCard, updateCard, deleteCard, deleteDeck, getDeck, updateDeck, listGroups, reorderCards,
+  setBidirectional, reviewStats, type Card, type Deck, type DeckGroup, type ReviewStats,
 } from "@/lib/api";
+
+type Mode = "study" | "manage" | "review" | "custom" | "settings" | "editor";
+
+const GROUP_COLORS = [
+  { name: "None", value: "" },
+  { name: "Rose", value: "#f43f5e" },
+  { name: "Amber", value: "#f59e0b" },
+  { name: "Emerald", value: "#10b981" },
+  { name: "Sky", value: "#0ea5e9" },
+  { name: "Violet", value: "#8b5cf6" },
+];
+
+/** First non-empty line of card HTML as plain text (for dense list rows). */
+function firstLine(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const text = (doc.body.textContent ?? "").replace(/\s+/g, " ").trim();
+  return text;
+}
+function hasImage(html: string): boolean {
+  return /<img/i.test(html);
+}
 
 export default function DeckDetailPage() {
   const { deckId = "" } = useParams();
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
 
   const [deck, setDeck] = useState<Deck | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
   const [groups, setGroups] = useState<DeckGroup[]>([]);
+  const [stats, setStats] = useState<ReviewStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [reviewing, setReviewing] = useState(false);
+  const [mode, setMode] = useState<Mode>(params.get("study") ? "review" : "study");
   const [shareOpen, setShareOpen] = useState(false);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customCfg, setCustomCfg] = useState<{ mode: "all" | "ahead"; days?: number }>({ mode: "all" });
+  const [aheadDays, setAheadDays] = useState(3);
 
+  // card editor
   const [editingId, setEditingId] = useState<string | null>(null);
   const [front, setFront] = useState("");
   const [back, setBack] = useState("");
-  const [formOpen, setFormOpen] = useState(false);
+  const [makeReverse, setMakeReverse] = useState(false);
+  const [bidirInitial, setBidirInitial] = useState(false);
+  const [groupLabel, setGroupLabel] = useState("");
+  const [groupColor, setGroupColor] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // card list filter + drag
+  const [filter, setFilter] = useState("");
+  const [dragId, setDragId] = useState<string | null>(null);
+
+  function loadStats() { reviewStats(deckId).then(setStats).catch(() => {}); }
 
   useEffect(() => {
     Promise.all([getDeck(deckId), listCards(deckId)])
@@ -33,120 +82,242 @@ export default function DeckDetailPage() {
       .catch(() => navigate("/dashboard"))
       .finally(() => setLoading(false));
     listGroups().then(setGroups).catch(() => {});
+    loadStats();
   }, [deckId, navigate]);
+
+  // Back to wherever the user came from (browse / decks / overview), not always overview.
+  function goBack() {
+    if (window.history.length > 1) navigate(-1);
+    else navigate("/dashboard");
+  }
 
   async function moveToGroup(groupId: string | null) {
     if (!deck) return;
-    const updated = await updateDeck(deckId, { group_id: groupId });
-    setDeck(updated);
+    setDeck(await updateDeck(deckId, { group_id: groupId }));
   }
 
   function openNew() {
-    setEditingId(null); setFront(""); setBack(""); setFormOpen(true);
+    setEditingId(null); setFront(""); setBack(""); setMakeReverse(false); setBidirInitial(false);
+    setGroupLabel(""); setGroupColor(""); setMode("editor");
   }
-  function openEdit(card: Card) {
-    setEditingId(card.id); setFront(card.front_html); setBack(card.back_html); setFormOpen(true);
+  function openEdit(c: Card) {
+    // Always edit the note's primary (basic) card; the reverse mirrors it.
+    const rep = c.note_id ? (cards.find((x) => x.note_id === c.note_id && x.card_type === "basic") ?? c) : c;
+    const bidir = Boolean(rep.note_id) && cards.some((x) => x.note_id === rep.note_id && x.id !== rep.id);
+    setEditingId(rep.id); setFront(rep.front_html); setBack(rep.back_html);
+    setMakeReverse(bidir); setBidirInitial(bidir);
+    setGroupLabel(rep.group_label ?? ""); setGroupColor(rep.group_color ?? ""); setMode("editor");
   }
 
   async function save() {
     if (!front.trim()) return;
     setSaving(true);
     try {
+      const g = { group_label: groupLabel.trim() || null, group_color: groupColor || null };
       if (editingId) {
-        const updated = await updateCard(deckId, editingId, { front_html: front, back_html: back });
-        setCards((cs) => cs.map((c) => (c.id === editingId ? updated : c)));
+        await updateCard(deckId, editingId, { front_html: front, back_html: back, ...g });
+        if (makeReverse !== bidirInitial) {
+          await setBidirectional(deckId, editingId, makeReverse);
+        }
+        setCards(await listCards(deckId)); // refresh (sibling added/removed/mirrored)
       } else {
-        const created = await createCard(deckId, { front_html: front, back_html: back });
-        setCards((cs) => [...cs, created]);
+        await createCard(deckId, {
+          front_html: front, back_html: back, make_reverse: makeReverse,
+          position: cards.length, ...g,
+        });
+        setCards(await listCards(deckId)); // reload (reverse card may be added)
       }
-      setFormOpen(false); setFront(""); setBack(""); setEditingId(null);
+      setMode("manage"); setEditingId(null); setFront(""); setBack("");
+      loadStats();
     } finally {
       setSaving(false);
     }
   }
 
-  async function remove(id: string) {
-    await deleteCard(deckId, id);
-    setCards((cs) => cs.filter((c) => c.id !== id));
+  // ---- drag & drop reorder (study order, top -> bottom) ----
+  function onDrop(targetRepId: string) {
+    if (!dragId || dragId === targetRepId) return;
+    const order = noteGroups.map((g) => g.rep.id);
+    const from = order.indexOf(dragId);
+    const to = order.indexOf(targetRepId);
+    if (from < 0 || to < 0) return;
+    const ng = [...noteGroups];
+    const [moved] = ng.splice(from, 1);
+    ng.splice(to, 0, moved!);
+    const newCards = ng.flatMap((g) => g.ids.map((id) => cards.find((c) => c.id === id)!));
+    setCards(newCards);
+    setDragId(null);
+    reorderCards(deckId, newCards.map((c) => c.id)).catch(() => {});
   }
+
+  async function removeNote(ids: string[]) {
+    await Promise.all(ids.map((id) => deleteCard(deckId, id)));
+    setCards((cs) => cs.filter((c) => !ids.includes(c.id)));
+    loadStats();
+  }
+
+  // Group linked siblings (bidirectional notes) so each note shows once.
+  const noteGroups = useMemo(() => {
+    const map = new Map<string, Card[]>();
+    for (const c of cards) {
+      const key = c.note_id ?? `solo:${c.id}`;
+      const arr = map.get(key);
+      if (arr) arr.push(c);
+      else map.set(key, [c]);
+    }
+    return Array.from(map.values()).map((arr) => ({
+      rep: arr.find((x) => x.card_type === "basic") ?? arr[0]!,
+      bidir: arr.length > 1,
+      ids: arr.map((x) => x.id),
+    }));
+  }, [cards]);
+
+  const f = filter.trim().toLowerCase();
+  const visibleGroups = noteGroups.filter(({ rep }) =>
+    !f || rep.front_html.toLowerCase().includes(f) || rep.back_html.toLowerCase().includes(f) ||
+    (rep.group_label ?? "").toLowerCase().includes(f),
+  );
 
   if (loading) {
     return <div className="flex min-h-[100dvh] items-center justify-center"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /></div>;
   }
 
+  // Full-screen card editor (its own "page", not a new tab).
+  if (mode === "editor") {
+    return (
+      <>
+        <CardEditorScreen
+          title={editingId ? "Edit card" : "New card"}
+          front={front} back={back} onFront={setFront} onBack={setBack}
+          groupLabel={groupLabel} onGroupLabel={setGroupLabel}
+          groupColor={groupColor} onGroupColor={setGroupColor}
+          showReverse={true} makeReverse={makeReverse} onMakeReverse={setMakeReverse}
+          saving={saving} canSave={Boolean(front.trim())}
+          onCancel={() => { setMode("manage"); setEditingId(null); }}
+          onSave={save}
+        />
+        <AssistantBubble deckId={deckId} />
+      </>
+    );
+  }
+
   return (
     <div className="min-h-[100dvh] bg-background">
       <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border/50 bg-background/80 px-4 backdrop-blur-xl">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")} aria-label="Back">
+        <Button variant="ghost" size="icon" onClick={goBack} aria-label="Back">
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <h1 className="min-w-0 flex-1 truncate text-base font-semibold">{deck?.title}</h1>
         {groups.length > 0 && (
-          <select
+          <SelectMenu
             value={deck?.group_id ?? ""}
-            onChange={(e) => moveToGroup(e.target.value || null)}
-            aria-label="Move to folder"
-            className="hidden h-9 rounded-lg border border-input bg-background/60 px-2 text-sm sm:block"
-          >
-            <option value="">No folder</option>
-            {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-          </select>
+            onChange={(v) => moveToGroup(v || null)}
+            ariaLabel="Move to folder"
+            align="end"
+            className="hidden w-40 sm:flex"
+            options={[{ value: "", label: "No folder" }, ...groups.map((g) => ({ value: g.id, label: g.name }))]}
+          />
         )}
         <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setShareOpen(true)}>
           <Share2 className="h-4 w-4" /> <span className="hidden sm:inline">Share</span>
         </Button>
-        <Button size="sm" className="gap-1.5 rounded-lg font-semibold" onClick={() => setReviewing(true)} disabled={cards.length === 0}>
-          <Play className="h-4 w-4 fill-current" /> Review
+        <Button
+          variant={mode === "settings" ? "secondary" : "ghost"}
+          size="sm" className="gap-1.5"
+          onClick={() => { setMode((m) => (m === "settings" ? "study" : "settings")); setParams({}); }}
+        >
+          <Settings2 className="h-4 w-4" /> <span className="hidden sm:inline">Deck settings</span>
         </Button>
       </header>
 
       <main className="mx-auto w-full max-w-3xl space-y-6 p-4 md:p-8">
-        {reviewing ? (
-          <ReviewSession deckId={deckId} onClose={() => setReviewing(false)} />
-        ) : (
+        {(mode === "review" || mode === "custom") && (
+          <ReviewSession
+            deckId={deckId}
+            custom={mode === "custom" ? customCfg : null}
+            persist={mode === "review" || Boolean(deck?.custom_study_updates)}
+            onClose={() => { setMode("study"); setParams({}); loadStats(); listCards(deckId).then(setCards); }}
+          />
+        )}
+
+        {mode === "study" && (
+          <StudyScreen
+            stats={stats}
+            total={cards.length}
+            onStudy={() => setMode("review")}
+            onCustom={() => setCustomOpen(true)}
+            onManage={() => setMode("manage")}
+          />
+        )}
+
+        {mode === "settings" && deck && (
+          <DeckSettings
+            deck={deck}
+            onSaved={(d) => setDeck(d)}
+            onManageCards={() => setMode("manage")}
+            onDeleted={() => goBack()}
+          />
+        )}
+
+        {mode === "manage" && (
           <>
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-muted-foreground">{cards.length} cards</h2>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <input
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  placeholder="Search cards…"
+                  className="h-10 w-full rounded-xl border border-input bg-background/60 px-3 text-sm outline-none transition-all focus-visible:border-primary/60 focus-visible:ring-4 focus-visible:ring-primary/15"
+                />
+              </div>
               <Button size="sm" variant="outline" className="gap-1.5 rounded-lg" onClick={openNew}>
                 <Plus className="h-4 w-4" /> New card
               </Button>
             </div>
 
-            {formOpen && (
-              <div className="space-y-3 rounded-2xl border border-border/60 bg-card/60 p-4">
-                <p className="label-mono">Front</p>
-                <RichTextEditor value={front} onChange={setFront} placeholder="Question…" ariaLabel="Card front" />
-                <p className="label-mono">Back</p>
-                <RichTextEditor value={back} onChange={setBack} placeholder="Answer…" ariaLabel="Card back" />
-                <div className="flex justify-end gap-2">
-                  <Button variant="ghost" onClick={() => setFormOpen(false)}>Cancel</Button>
-                  <Button onClick={save} disabled={saving || !front.trim()} className="rounded-xl font-semibold">
-                    {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</> : editingId ? "Update card" : "Add card"}
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {cards.length === 0 && !formOpen ? (
+            {visibleGroups.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border/60 p-10 text-center">
-                <p className="text-sm text-muted-foreground">No cards yet. Add your first one.</p>
+                <p className="text-sm text-muted-foreground">{filter ? "No cards match." : "No cards yet. Add your first one."}</p>
               </div>
             ) : (
-              <div className="space-y-2">
-                {cards.map((c) => (
-                  <div key={c.id} className="group flex items-start gap-3 rounded-2xl border border-border/60 bg-card/60 p-4">
-                    <div className="min-w-0 flex-1">
-                      <RichTextView html={c.front_html} className="text-sm font-medium" />
-                      <div className="mt-1 border-t border-border/40 pt-1">
-                        <RichTextView html={c.back_html} className="text-sm text-muted-foreground" />
+              <div className="overflow-hidden rounded-xl border border-border/60">
+                <div className="divide-y divide-border/40">
+                  {visibleGroups.map(({ rep, bidir, ids }) => {
+                    const fL = firstLine(rep.front_html), bL = firstLine(rep.back_html);
+                    return (
+                      <div
+                        key={rep.id}
+                        draggable={!filter}
+                        onDragStart={() => setDragId(rep.id)}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={() => onDrop(rep.id)}
+                        className="group flex items-center gap-2 px-3 py-2.5 transition-colors hover:bg-accent/40"
+                      >
+                        {!filter && <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground/50" />}
+                        <button onClick={() => openEdit(rep)} className="grid min-w-0 flex-1 grid-cols-2 items-center gap-3 text-left">
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <span className="min-w-0 truncate text-sm">{fL || "—"}</span>
+                            {hasImage(rep.front_html) && <ImageIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+                          </span>
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <span className="min-w-0 truncate text-sm text-muted-foreground">{bL || "—"}</span>
+                            {bidir && (
+                              <span className="inline-flex shrink-0 items-center gap-1 rounded bg-primary/10 px-1.5 text-[10px] font-medium text-primary" title="Studied both directions">
+                                <ArrowLeftRight className="h-3 w-3" /> both
+                              </span>
+                            )}
+                            {rep.group_label && <span className="shrink-0 rounded px-1.5 text-[10px]" style={{ background: (rep.group_color ?? "#888") + "22", color: rep.group_color ?? undefined }}>{rep.group_label}</span>}
+                            {hasImage(rep.back_html) && <ImageIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+                          </span>
+                        </button>
+                        <div className="flex shrink-0 gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                          <button onClick={() => openEdit(rep)} aria-label="Edit card" className="text-muted-foreground hover:text-foreground"><Pencil className="h-4 w-4" /></button>
+                          <button onClick={() => removeNote(ids)} aria-label="Delete card" className="text-destructive"><Trash2 className="h-4 w-4" /></button>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex shrink-0 gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                      <button onClick={() => openEdit(c)} aria-label="Edit card" className="text-muted-foreground hover:text-foreground"><Pencil className="h-4 w-4" /></button>
-                      <button onClick={() => remove(c.id)} aria-label="Delete card" className="text-destructive"><Trash2 className="h-4 w-4" /></button>
-                    </div>
-                  </div>
-                ))}
+                    );
+                  })}
+                </div>
               </div>
             )}
           </>
@@ -154,6 +325,298 @@ export default function DeckDetailPage() {
       </main>
 
       <ShareDialog open={shareOpen} onOpenChange={setShareOpen} deckId={deckId} />
+      <AssistantBubble deckId={deckId} />
+
+      {/* Custom study: pick the set before starting. */}
+      <Dialog open={customOpen} onOpenChange={setCustomOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Custom study</DialogTitle>
+            <DialogDescription>Study outside the normal schedule. Ratings here don't change your schedule.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <button
+              onClick={() => { setCustomCfg({ mode: "all" }); setCustomOpen(false); setMode("custom"); }}
+              className="flex w-full items-center gap-3 rounded-xl border border-border/60 p-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/40"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><Play className="h-4 w-4 fill-current" /></span>
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">All cards</span>
+                <span className="block text-xs text-muted-foreground">Review every card in this deck, ignoring due dates.</span>
+              </span>
+            </button>
+            <div className="rounded-xl border border-border/60 p-3">
+              <p className="text-sm font-medium">Due within a few days</p>
+              <p className="mb-3 text-xs text-muted-foreground">Pull cards that become due soon, to study ahead.</p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={60}
+                  value={aheadDays}
+                  onChange={(e) => setAheadDays(Math.max(1, Math.min(60, Number(e.target.value) || 1)))}
+                  className="h-9 w-20 rounded-lg border border-input bg-background/60 px-2.5 text-sm outline-none focus-visible:border-primary/60"
+                  aria-label="Days ahead"
+                />
+                <span className="text-sm text-muted-foreground">days</span>
+                <div className="flex-1" />
+                <Button size="sm" className="rounded-lg" onClick={() => { setCustomCfg({ mode: "ahead", days: aheadDays }); setCustomOpen(false); setMode("custom"); }}>
+                  Start
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+/* ── Full-screen card editor ──────────────────────────────────────────── */
+function CardEditorScreen({
+  title, front, back, onFront, onBack, groupLabel, onGroupLabel, groupColor, onGroupColor,
+  showReverse, makeReverse, onMakeReverse, saving, canSave, onCancel, onSave,
+}: {
+  title: string;
+  front: string; back: string; onFront: (v: string) => void; onBack: (v: string) => void;
+  groupLabel: string; onGroupLabel: (v: string) => void; groupColor: string; onGroupColor: (v: string) => void;
+  showReverse: boolean; makeReverse: boolean; onMakeReverse: (v: boolean) => void;
+  saving: boolean; canSave: boolean; onCancel: () => void; onSave: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-40 flex flex-col bg-background">
+      <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border/50 bg-background/80 px-4 backdrop-blur-xl">
+        <Button variant="ghost" size="icon" onClick={onCancel} aria-label="Back to cards"><ArrowLeft className="h-5 w-5" /></Button>
+        <h1 className="min-w-0 flex-1 truncate text-base font-semibold">{title}</h1>
+        <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button onClick={onSave} disabled={saving || !canSave} className="rounded-xl font-semibold">
+          {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</> : "Save"}
+        </Button>
+      </header>
+      <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+        <div className="mx-auto w-full max-w-3xl space-y-4 p-4 md:p-8">
+          <RichTextProvider>
+            <RichTextToolbar />
+            <div className="space-y-1.5">
+              <p className="label-mono">Front</p>
+              <RichTextField value={front} onChange={onFront} placeholder="Question…" ariaLabel="Card front" />
+            </div>
+            <div className="space-y-1.5">
+              <p className="label-mono">Back</p>
+              <RichTextField value={back} onChange={onBack} placeholder="Answer…" ariaLabel="Card back" />
+            </div>
+          </RichTextProvider>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              value={groupLabel}
+              onChange={(e) => onGroupLabel(e.target.value)}
+              placeholder="Group (optional)"
+              className="h-9 w-40 rounded-lg border border-input bg-background/60 px-2.5 text-sm outline-none focus-visible:border-primary/60"
+            />
+            <div className="flex items-center gap-1">
+              {GROUP_COLORS.map((c) => (
+                <button
+                  key={c.value}
+                  type="button"
+                  onClick={() => onGroupColor(c.value)}
+                  aria-label={c.name}
+                  className={cn("h-6 w-6 rounded-full border-2", groupColor === c.value ? "border-foreground" : "border-transparent")}
+                  style={{ background: c.value || "transparent", boxShadow: c.value ? undefined : "inset 0 0 0 1px var(--border)" }}
+                />
+              ))}
+            </div>
+          </div>
+
+          {showReverse && (
+            <button
+              type="button"
+              role="switch"
+              aria-checked={makeReverse}
+              onClick={() => onMakeReverse(!makeReverse)}
+              className={cn(
+                "flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors",
+                makeReverse ? "border-primary/50 bg-primary/5" : "border-border/60 hover:bg-accent/40",
+              )}
+            >
+              <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", makeReverse ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground")}>
+                <ArrowLeftRight className="h-4 w-4" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium">Both directions</span>
+                <span className="block text-xs text-muted-foreground">One card, studied front to back and back to front. Each direction tracks its own schedule.</span>
+              </span>
+              <span className={cn("relative h-6 w-10 shrink-0 rounded-full transition-colors", makeReverse ? "bg-primary" : "bg-muted")}>
+                <span className={cn("absolute top-0.5 h-5 w-5 rounded-full bg-background shadow transition-all", makeReverse ? "left-[1.125rem]" : "left-0.5")} />
+              </span>
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Deck settings (edit appearance/title/desc after creation) ────────── */
+function DeckSettings({
+  deck, onSaved, onManageCards, onDeleted,
+}: {
+  deck: Deck;
+  onSaved: (d: Deck) => void;
+  onManageCards: () => void;
+  onDeleted: () => void;
+}) {
+  const [title, setTitle] = useState(deck.title);
+  const [description, setDescription] = useState(deck.description ?? "");
+  const [icon, setIcon] = useState<string | null>(deck.icon ?? null);
+  const [color, setColor] = useState<string>(deck.color ?? "violet");
+  const [saving, setSaving] = useState(false);
+  const [savedTick, setSavedTick] = useState(false);
+
+  async function save() {
+    if (!title.trim()) return;
+    setSaving(true);
+    try {
+      const d = await updateDeck(deck.id, { title: title.trim(), description, icon, color });
+      onSaved(d);
+      setSavedTick(true);
+      setTimeout(() => setSavedTick(false), 1600);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeDeck() {
+    if (!window.confirm(`Delete deck "${deck.title}" and all its cards? This cannot be undone.`)) return;
+    await deleteDeck(deck.id);
+    onDeleted();
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <p className="label-mono">Title</p>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="h-11 w-full rounded-xl border border-input bg-background/60 px-3 text-sm outline-none focus-visible:border-primary/60 focus-visible:ring-4 focus-visible:ring-primary/15"
+          maxLength={120}
+        />
+      </div>
+      <div className="space-y-2">
+        <p className="label-mono">Description</p>
+        <input
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          className="h-11 w-full rounded-xl border border-input bg-background/60 px-3 text-sm outline-none focus-visible:border-primary/60 focus-visible:ring-4 focus-visible:ring-primary/15"
+        />
+      </div>
+
+      <div className="space-y-3">
+        <p className="label-mono">Appearance</p>
+        <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-background/40 p-3">
+          <DeckBadge icon={icon} color={color} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold">{title.trim() || "Deck"}</p>
+            <p className="truncate text-xs text-muted-foreground">{description || "Preview"}</p>
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <p className="label-mono">Color</p>
+          <div className="flex flex-wrap gap-2">
+            {DECK_COLOR_KEYS.map((key) => {
+              const c = deckColorFor(key);
+              const active = color === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setColor(key)}
+                  aria-label={`Color ${key}`}
+                  aria-pressed={active}
+                  className={cn("h-7 w-7 rounded-full ring-2 ring-offset-2 ring-offset-background transition-all", c.swatch, active ? "scale-110 ring-foreground/50" : "ring-transparent hover:ring-foreground/25")}
+                />
+              );
+            })}
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <p className="label-mono">Icon</p>
+          <div className="grid grid-cols-6 gap-2 sm:grid-cols-8">
+            {DECK_ICON_KEYS.map((key) => {
+              const Ico = deckIconFor(key);
+              const active = icon === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setIcon(active ? null : key)}
+                  aria-label={`Icon ${key}`}
+                  aria-pressed={active}
+                  className={cn("flex aspect-square items-center justify-center rounded-xl border transition-all",
+                    active ? "border-primary bg-primary/15 text-primary" : "border-border/50 text-muted-foreground hover:border-primary/40 hover:bg-accent hover:text-foreground")}
+                >
+                  <Ico className="h-[18px] w-[18px]" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button onClick={save} disabled={saving || !title.trim()} className="rounded-xl font-semibold">
+          {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</> : savedTick ? <><Check className="h-4 w-4" /> Saved</> : "Save changes"}
+        </Button>
+        <Button variant="outline" onClick={onManageCards} className="rounded-xl">Manage cards</Button>
+        <div className="flex-1" />
+        <Button variant="ghost" onClick={removeDeck} className="gap-1.5 rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive">
+          <Trash2 className="h-4 w-4" /> Delete deck
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function StudyScreen({
+  stats, total, onStudy, onCustom, onManage,
+}: {
+  stats: ReviewStats | null;
+  total: number;
+  onStudy: () => void;
+  onCustom: () => void;
+  onManage: () => void;
+}) {
+  const ready = (stats?.new ?? 0) + (stats?.learning ?? 0) + (stats?.due ?? 0);
+  return (
+    <div className="mx-auto flex max-w-md flex-col items-center gap-8 py-10 text-center">
+      <div className="grid w-full grid-cols-3 gap-3">
+        <Stat label="New" value={stats?.new ?? 0} color="text-sky-500" />
+        <Stat label="Learning" value={stats?.learning ?? 0} color="text-amber-500" />
+        <Stat label="Due" value={stats?.due ?? 0} color="text-emerald-500" />
+      </div>
+
+      <Button onClick={onStudy} disabled={ready === 0} className="h-14 w-full rounded-2xl text-base font-semibold">
+        <Play className="h-5 w-5 fill-current" /> {ready ? `Study now (${ready})` : "Nothing due"}
+      </Button>
+
+      <div className="flex w-full gap-2">
+        <Button variant="outline" className="h-11 flex-1 rounded-xl" onClick={onCustom} disabled={total === 0}>
+          Custom study
+        </Button>
+        <Button variant="outline" className="h-11 flex-1 rounded-xl" onClick={onManage}>
+          Manage cards
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div className="rounded-2xl border border-border/60 bg-card/60 p-4">
+      <div className={cn("font-mono text-2xl font-bold tabular-nums", color)}>{value}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
     </div>
   );
 }
