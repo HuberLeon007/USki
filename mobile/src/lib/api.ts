@@ -307,4 +307,93 @@ export const getTwoFactor = () => apiFetch<TwoFactorResponse>("/auth/2fa", {}, a
 export const setTwoFactor = (enabled: boolean) =>
   apiFetch<TwoFactorResponse>("/auth/2fa", { method: "PATCH", body: JSON.stringify({ enabled }) }, authed);
 
+// ── Chat (Sero) ───────────────────────────────────────────────────────────
+export interface ChatApiMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+export interface ChatStreamHandlers {
+  onStatus?: (text: string) => void;
+  onDelta?: (text: string) => void;
+  onDone?: () => void;
+  onError?: (message?: string) => void;
+}
+
+/**
+ * Stream a Sero reply over SSE so tokens render live. Uses expo/fetch, which
+ * (unlike React Native's global fetch) exposes a readable response body on
+ * native. Frames are `data: {json}\n\n` with type status | delta | done | error.
+ */
+export async function sendChatStream(
+  messages: ChatApiMessage[],
+  deckId: string | null,
+  handlers: ChatStreamHandlers,
+): Promise<void> {
+  const { fetch: streamFetch } = await import("expo/fetch");
+  const token = await tokenStorage.getAccess();
+  if (!token) {
+    handlers.onError?.("Session expired");
+    return;
+  }
+  let res: Awaited<ReturnType<typeof streamFetch>>;
+  try {
+    res = await streamFetch(`${API_BASE}/chat/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ messages, deck_id: deckId ?? null }),
+    });
+  } catch {
+    handlers.onError?.();
+    return;
+  }
+  if (!res.ok || !res.body) {
+    handlers.onError?.();
+    return;
+  }
+
+  let buf = "";
+  let finished = false;
+  const finish = () => {
+    if (!finished) {
+      finished = true;
+      handlers.onDone?.();
+    }
+  };
+  try {
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const frames = buf.split("\n\n");
+      buf = frames.pop() ?? "";
+      for (const frame of frames) {
+        const line = frame.trim();
+        if (!line.startsWith("data:")) continue;
+        const payload = line.slice(5).trim();
+        if (!payload) continue;
+        try {
+          const evt = JSON.parse(payload) as { type: string; text?: string };
+          if (evt.type === "status") handlers.onStatus?.(evt.text ?? "");
+          else if (evt.type === "delta") handlers.onDelta?.(evt.text ?? "");
+          else if (evt.type === "done") finish();
+          else if (evt.type === "error") {
+            handlers.onError?.(evt.text);
+            finished = true;
+            return;
+          }
+        } catch {
+          /* ignore malformed frame */
+        }
+      }
+    }
+  } catch {
+    handlers.onError?.();
+    return;
+  }
+  finish();
+}
+
 export { API_URL };
