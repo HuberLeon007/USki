@@ -1,7 +1,7 @@
-import Ionicons from "@expo/vector-icons/Ionicons";
 import { Tabs, useRouter } from "expo-router";
 import { Pressable } from "react-native";
 
+import { Icon } from "@/components/icon";
 import { PRIMARY, useColors } from "@/lib/ui";
 
 /**
@@ -20,7 +20,7 @@ export default function TabsLayout() {
       onPress={() => router.push("/settings")}
       style={{ paddingHorizontal: 8 }}
     >
-      <Ionicons name="settings-outline" size={22} color={c.text} />
+      <Icon name="settings" size={22} color={c.text} />
     </Pressable>
   );
 
@@ -32,7 +32,7 @@ export default function TabsLayout() {
       onPress={() => router.push("/notifications")}
       style={{ paddingHorizontal: 12 }}
     >
-      <Ionicons name="notifications-outline" size={22} color={c.text} />
+      <Icon name="bell" size={22} color={c.text} />
     </Pressable>
   );
 
@@ -50,35 +50,35 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: "Overview",
-          tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Icon name="home" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="decks"
         options={{
           title: "Decks",
-          tabBarIcon: ({ color, size }) => <Ionicons name="layers-outline" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Icon name="layers" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="browse"
         options={{
           title: "Browse",
-          tabBarIcon: ({ color, size }) => <Ionicons name="search-outline" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Icon name="search" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="shared"
         options={{
           title: "Shared",
-          tabBarIcon: ({ color, size }) => <Ionicons name="people-outline" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Icon name="users" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="sero"
         options={{
           title: "Sero",
-          tabBarIcon: ({ color, size }) => <Ionicons name="sparkles-outline" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Icon name="sparkles" size={size} color={color} />,
         }}
       />
     </Tabs>

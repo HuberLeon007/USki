@@ -1,4 +1,3 @@
-import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -13,6 +12,7 @@ import {
   View,
 } from "react-native";
 
+import { Icon } from "@/components/icon";
 import {
   leaveSharedDeck,
   listSharedDecks,
@@ -156,7 +156,7 @@ export default function SharedScreen() {
                 {d.title}
               </Text>
               <Pressable accessibilityLabel="Remove shared deck" hitSlop={10} onPress={() => confirmLeave(d)}>
-                <Ionicons name="exit-outline" size={20} color={c.textSecondary} />
+                <Icon name="leave" size={20} color={c.textSecondary} />
               </Pressable>
             </Pressable>
           ))

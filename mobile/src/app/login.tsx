@@ -38,7 +38,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (authenticated) return <Redirect href="/(app)" />;
+  if (authenticated) return <Redirect href="/" />;
 
   async function submitEmail() {
     const value = email.trim().toLowerCase();
@@ -69,7 +69,7 @@ export default function LoginScreen() {
     try {
       const res = await verifyOtp(email, code.trim());
       await signIn(res.access_token, res.refresh_token);
-      router.replace("/(app)");
+      router.replace("/");
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) setError("Wrong code. Please try again.");
       else setError("Verification failed. Please try again.");

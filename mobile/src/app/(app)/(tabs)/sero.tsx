@@ -9,8 +9,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import Ionicons from "@expo/vector-icons/Ionicons";
-
+import { Icon } from "@/components/icon";
 import { sendChatStream, type ChatApiMessage } from "@/lib/api";
 import { PRIMARY, useColors } from "@/lib/ui";
 
@@ -96,7 +95,7 @@ export default function SeroScreen() {
         keyboardShouldPersistTaps="handled"
         ListEmptyComponent={
           <View style={styles.intro}>
-            <Ionicons name="sparkles" size={40} color={PRIMARY} />
+            <Icon name="sparkles" size={40} color={PRIMARY} />
             <Text style={[styles.introTitle, { color: c.text }]}>Hi, I'm Sero</Text>
             <Text style={[styles.introBody, { color: c.textSecondary }]}>
               Ask me to explain a topic, make flashcards, or quiz you on your decks.
@@ -143,7 +142,7 @@ export default function SeroScreen() {
             { backgroundColor: PRIMARY, opacity: sending || !draft.trim() ? 0.4 : pressed ? 0.85 : 1 },
           ]}
         >
-          <Ionicons name="arrow-up" size={22} color="#fff" />
+          <Icon name="send" size={22} color="#fff" />
         </Pressable>
       </View>
     </KeyboardAvoidingView>

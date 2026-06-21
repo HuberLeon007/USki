@@ -1,4 +1,3 @@
-import Ionicons from "@expo/vector-icons/Ionicons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
@@ -13,6 +12,7 @@ import {
   View,
 } from "react-native";
 
+import { Icon } from "@/components/icon";
 import { createGroup, listDecks, listGroups, SessionExpiredError, type Deck, type DeckGroup } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { PRIMARY, useColors } from "@/lib/ui";
@@ -97,7 +97,7 @@ export default function DecksScreen() {
           </Text>
         ) : null}
       </View>
-      <Ionicons name="chevron-forward" size={18} color={c.textSecondary} />
+      <Icon name="chevron" size={18} color={c.textSecondary} />
     </Pressable>
   );
 
@@ -124,14 +124,14 @@ export default function DecksScreen() {
           onPress={() => router.push("/new-deck")}
           style={({ pressed }) => [styles.actionBtn, { backgroundColor: PRIMARY, opacity: pressed ? 0.85 : 1 }]}
         >
-          <Ionicons name="add" size={18} color="#fff" />
+          <Icon name="add" size={18} color="#fff" />
           <Text style={styles.actionText}>New deck</Text>
         </Pressable>
         <Pressable
           onPress={() => setFolderOpen(true)}
           style={({ pressed }) => [styles.actionBtnAlt, { borderColor: c.backgroundSelected, opacity: pressed ? 0.7 : 1 }]}
         >
-          <Ionicons name="folder-outline" size={18} color={c.text} />
+          <Icon name="folder" size={18} color={c.text} />
           <Text style={[styles.actionTextAlt, { color: c.text }]}>New folder</Text>
         </Pressable>
       </View>
@@ -141,7 +141,7 @@ export default function DecksScreen() {
         return (
           <View key={g.id} style={styles.section}>
             <View style={styles.sectionHead}>
-              <Ionicons name="folder-outline" size={16} color={c.textSecondary} />
+              <Icon name="folder" size={16} color={c.textSecondary} />
               <Text style={[styles.sectionTitle, { color: c.text }]}>{g.name}</Text>
               <Text style={[styles.count, { color: c.textSecondary }]}>{inGroup.length}</Text>
             </View>
@@ -156,7 +156,7 @@ export default function DecksScreen() {
 
       <View style={styles.section}>
         <View style={styles.sectionHead}>
-          <Ionicons name="layers-outline" size={16} color={c.textSecondary} />
+          <Icon name="layers" size={16} color={c.textSecondary} />
           <Text style={[styles.sectionTitle, { color: c.text }]}>{groups.length ? "Ungrouped" : "All decks"}</Text>
           <Text style={[styles.count, { color: c.textSecondary }]}>{ungrouped.length}</Text>
         </View>

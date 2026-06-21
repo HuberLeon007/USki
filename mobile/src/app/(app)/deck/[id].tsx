@@ -10,7 +10,7 @@ import {
   Text,
   View,
 } from "react-native";
-import Ionicons from "@expo/vector-icons/Ionicons";
+import { Icon } from "@/components/icon";
 
 import {
   createInvite,
@@ -117,13 +117,13 @@ export default function DeckDetailScreen() {
                 hitSlop={10}
                 onPress={() => router.push({ pathname: "/card-editor", params: { deckId: deck.id } })}
               >
-                <Ionicons name="add" size={26} color={PRIMARY} />
+                <Icon name="add" size={26} color={PRIMARY} />
               </Pressable>
               <Pressable accessibilityLabel="Share deck" hitSlop={10} onPress={shareDeck}>
-                <Ionicons name="share-outline" size={22} color={c.text} />
+                <Icon name="share" size={22} color={c.text} />
               </Pressable>
               <Pressable accessibilityLabel="Delete deck" hitSlop={10} onPress={confirmDeleteDeck}>
-                <Ionicons name="trash-outline" size={22} color={STATE_COLORS.due} />
+                <Icon name="trash" size={22} color={STATE_COLORS.due} />
               </Pressable>
             </View>
           ),
