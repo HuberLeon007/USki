@@ -100,6 +100,63 @@ export interface ReviewStats {
   total: number;
 }
 
+export interface DeckGroup {
+  id: string;
+  owner_id: string;
+  parent_group_id: string | null;
+  name: string;
+  position: number;
+}
+
+export type Permission = "read" | "edit" | "share";
+
+export interface DeckAccess {
+  permission: Permission;
+  is_owner: boolean;
+  owner: string | null;
+  granted_by: string | null;
+}
+
+export interface OutgoingShare {
+  deck_id: string;
+  deck_title: string;
+  grantee_id: string;
+  grantee: string | null;
+  permission: Permission;
+}
+
+export type CardType = "basic" | "reverse";
+
+export interface Card {
+  id: string;
+  deck_id: string;
+  front_json: Record<string, unknown>;
+  front_html: string;
+  back_json: Record<string, unknown>;
+  back_html: string;
+  position: number;
+  card_type: CardType;
+  note_id: string | null;
+  group_label: string | null;
+  group_color: string | null;
+}
+
+export interface BrowseCard extends Card {
+  deck_title: string;
+}
+
+export interface Notification {
+  id: string;
+  deck_id: string | null;
+  kind: string;
+  message: string;
+  seen: boolean;
+}
+
+export interface TwoFactorResponse {
+  enabled: boolean;
+}
+
 interface FetchOpts {
   requireAuth?: boolean;
   _retried?: boolean;
@@ -181,8 +238,33 @@ export const setUsername = (username: string) =>
 
 // ── Decks ───────────────────────────────────────────────────────────────
 export const listDecks = () => apiFetch<Deck[]>("/decks", {}, authed);
+export const listSharedDecks = () => apiFetch<Deck[]>("/decks/shared", {}, authed);
+export const getDeck = (id: string) => apiFetch<Deck>(`/decks/${id}`, {}, authed);
+export const getDeckAccess = (id: string) => apiFetch<DeckAccess>(`/decks/${id}/access`, {}, authed);
 
 export const reviewStats = (deckId: string) =>
   apiFetch<ReviewStats>(`/decks/${deckId}/review/stats`, {}, authed);
+
+// ── Groups (folders) ──────────────────────────────────────────────────────
+export const listGroups = () => apiFetch<DeckGroup[]>("/groups", {}, authed);
+
+// ── Cards / browse ────────────────────────────────────────────────────────
+export const listCards = (deckId: string) => apiFetch<Card[]>(`/decks/${deckId}/cards`, {}, authed);
+export const browseCards = () => apiFetch<BrowseCard[]>("/browse/cards", {}, authed);
+
+// ── Sharing ───────────────────────────────────────────────────────────────
+export const outgoingShares = () => apiFetch<OutgoingShare[]>("/shares/outgoing", {}, authed);
+export const leaveSharedDeck = (deckId: string) =>
+  apiFetch<void>(`/shares/incoming/${deckId}`, { method: "DELETE" }, authed);
+
+// ── Notifications ─────────────────────────────────────────────────────────
+export const listNotifications = () => apiFetch<Notification[]>("/notifications", {}, authed);
+export const markNotificationsSeen = (ids: string[]) =>
+  apiFetch<void>("/notifications/seen", { method: "POST", body: JSON.stringify({ ids }) }, authed);
+
+// ── Two-factor (email OTP) ────────────────────────────────────────────────
+export const getTwoFactor = () => apiFetch<TwoFactorResponse>("/auth/2fa", {}, authed);
+export const setTwoFactor = (enabled: boolean) =>
+  apiFetch<TwoFactorResponse>("/auth/2fa", { method: "PATCH", body: JSON.stringify({ enabled }) }, authed);
 
 export { API_URL };
