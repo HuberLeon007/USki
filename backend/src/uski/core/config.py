@@ -49,6 +49,17 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = ""
     EMAIL_FROM: str = "USki <onboarding@resend.dev>"
 
+    # Passkeys / WebAuthn. RP_ID is the registrable domain (no scheme/port);
+    # "localhost" covers the dev ports. WEBAUTHN_ORIGINS is the allow-list of
+    # full page origins the ceremony may come from. Set both for prod.
+    WEBAUTHN_RP_ID: str = "localhost"
+    WEBAUTHN_RP_NAME: str = "USki"
+    WEBAUTHN_ORIGINS: str = "http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174"
+
+    @property
+    def webauthn_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.WEBAUTHN_ORIGINS.split(",") if o.strip()]
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.BACKEND_CORS_ORIGINS.split(",")]

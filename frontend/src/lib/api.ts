@@ -276,6 +276,52 @@ export async function revokeOtherSessions(): Promise<MessageResponse> {
   );
 }
 
+// ── Passkeys / WebAuthn ─────────────────────────────────────────────────
+export interface PasskeyInfo {
+  id: string;
+  name: string | null;
+  created_at: string | null;
+  last_used_at: string | null;
+}
+
+export async function listPasskeys(): Promise<PasskeyInfo[]> {
+  return apiFetch<PasskeyInfo[]>("/auth/passkeys", {}, { requireAuth: true });
+}
+
+/** Register a new passkey for the signed-in user via the platform authenticator. */
+export async function registerPasskey(name: string): Promise<PasskeyInfo> {
+  const { startRegistration } = await import("@simplewebauthn/browser");
+  const optionsJSON = await apiFetch<Record<string, unknown>>(
+    "/auth/passkeys/register/options",
+    { method: "POST", body: "{}" },
+    { requireAuth: true },
+  );
+  const credential = await startRegistration({ optionsJSON: optionsJSON as never });
+  return apiFetch<PasskeyInfo>(
+    "/auth/passkeys/register/verify",
+    { method: "POST", body: JSON.stringify({ credential, name }) },
+    { requireAuth: true },
+  );
+}
+
+export async function deletePasskey(id: string): Promise<MessageResponse> {
+  return apiFetch<MessageResponse>(`/auth/passkeys/${id}`, { method: "DELETE" }, { requireAuth: true });
+}
+
+/** Sign in with a discoverable passkey; returns a canonical session. */
+export async function loginWithPasskey(): Promise<AuthResponse> {
+  const { startAuthentication } = await import("@simplewebauthn/browser");
+  const { options, handle } = await apiFetch<{ options: Record<string, unknown>; handle: string }>(
+    "/auth/passkeys/login/options",
+    { method: "POST", body: "{}" },
+  );
+  const credential = await startAuthentication({ optionsJSON: options as never });
+  return apiFetch<AuthResponse>(
+    "/auth/passkeys/login/verify",
+    { method: "POST", body: JSON.stringify({ handle, credential }) },
+  );
+}
+
 export async function refreshToken(
   refresh_token: string,
 ): Promise<AuthResponse> {

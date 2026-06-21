@@ -17,6 +17,7 @@ from slowapi.util import get_remote_address
 
 from uski.core.config import settings
 from uski.core.security import CurrentUser, get_current_user
+import json
 import random
 
 from uski.core.supabase import get_supabase_anon_client, get_supabase_client
@@ -25,6 +26,9 @@ from uski.schemas.auth import (
     ChangeUsernameRequest,
     MessageResponse,
     MockSocialRequest,
+    PasskeyInfo,
+    PasskeyLoginVerify,
+    PasskeyRegisterVerify,
     RefreshRequest,
     RevokeOthersRequest,
     SendOtpRequest,
@@ -42,6 +46,7 @@ from uski.services.auth_identity import (
     requires_onboarding,
     resolve_account,
 )
+from uski.services import passkeys as passkeys_svc
 from uski.services.sessions import (
     device_from_user_agent,
     geolocate,
@@ -504,6 +509,103 @@ async def revoke_other_sessions_endpoint(
     """Sign out every device except the caller's current one."""
     removed = revoke_other_sessions(current_user.id, body.current_key)
     return MessageResponse(message=f"Signed out {removed} other device(s).")
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Passkeys / WebAuthn
+# ──────────────────────────────────────────────────────────────────────────
+
+
+@router.post("/passkeys/register/options")
+async def passkey_register_options(current_user: CurrentUser = Depends(get_current_user)) -> dict:
+    """Begin passkey registration: options for navigator.credentials.create()."""
+    name = current_user.email or current_user.id
+    return json.loads(passkeys_svc.registration_options(current_user.id, name))
+
+
+@router.post("/passkeys/register/verify", response_model=PasskeyInfo)
+async def passkey_register_verify(
+    body: PasskeyRegisterVerify,
+    request: Request,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PasskeyInfo:
+    """Finish passkey registration: verify attestation and store the credential."""
+    origin = request.headers.get("origin")
+    if not passkeys_svc.origin_allowed(origin):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Untrusted origin")
+    try:
+        row = passkeys_svc.verify_registration(
+            current_user.id, json.dumps(body.credential), origin, body.name
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("passkey registration failed for {}: {}", current_user.id, exc)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Passkey registration failed")
+    return PasskeyInfo(id=row["id"], name=row.get("name"), created_at=row.get("created_at"))
+
+
+@router.get("/passkeys", response_model=list[PasskeyInfo])
+async def passkey_list(current_user: CurrentUser = Depends(get_current_user)) -> list[PasskeyInfo]:
+    """List the user's registered passkeys."""
+    return [
+        PasskeyInfo(
+            id=c["id"],
+            name=c.get("name"),
+            created_at=c.get("created_at"),
+            last_used_at=c.get("last_used_at"),
+        )
+        for c in passkeys_svc.list_credentials(current_user.id)
+    ]
+
+
+@router.delete("/passkeys/{cred_id}", response_model=MessageResponse)
+async def passkey_delete(
+    cred_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> MessageResponse:
+    """Remove one of the user's passkeys."""
+    passkeys_svc.delete_credential(current_user.id, cred_id)
+    return MessageResponse(message="Passkey removed.")
+
+
+@router.post("/passkeys/login/options")
+async def passkey_login_options() -> dict:
+    """Begin discoverable passkey login: options + a handle to echo back."""
+    options_json, handle = passkeys_svc.authentication_options()
+    return {"options": json.loads(options_json), "handle": handle}
+
+
+@router.post("/passkeys/login/verify", response_model=AuthResponse)
+async def passkey_login_verify(
+    body: PasskeyLoginVerify,
+    request: Request,
+    background: BackgroundTasks,
+) -> AuthResponse:
+    """Finish passkey login: verify the assertion and mint a real session."""
+    origin = request.headers.get("origin")
+    if not passkeys_svc.origin_allowed(origin):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Untrusted origin")
+
+    user_id = passkeys_svc.verify_authentication(body.handle, json.dumps(body.credential), origin)
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Passkey authentication failed")
+
+    svc = get_supabase_client()
+    row = svc.table("user").select("email, username").eq("id", user_id).execute()
+    if not row.data or not row.data[0].get("email"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Account has no email to sign in with")
+    email = row.data[0]["email"]
+    needs_username = row.data[0].get("username") is None
+
+    access_token, refresh_token, uid = _mint_local_session(svc, get_supabase_anon_client(), email)
+    _capture_login(uid, email, refresh_token, request, background)
+    logger.info("passkey login: session minted for {}", email)
+    return AuthResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user_id=uid,
+        email=email,
+        needs_username=needs_username,
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────

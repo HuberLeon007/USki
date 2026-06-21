@@ -18,6 +18,9 @@ import {
   Compass,
   Monitor,
   MapPin,
+  KeyRound,
+  Plus,
+  Trash2,
   Loader2 as Spinner,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -33,10 +36,14 @@ import {
   listSessions,
   revokeSessionById,
   revokeOtherSessions,
+  listPasskeys,
+  registerPasskey,
+  deletePasskey,
   ApiError,
   SessionExpiredError,
   type UserResponse,
   type SessionInfo,
+  type PasskeyInfo,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -121,6 +128,7 @@ export default function SettingsPage() {
           {tab === "security" && (
             <div className="space-y-6">
               <SecurityPanel endSession={endSession} />
+              <PasskeysPanel endSession={endSession} />
               <SessionsPanel endSession={endSession} />
             </div>
           )}
@@ -706,6 +714,112 @@ function SessionsPanel({ endSession }: { endSession: () => void }) {
         </div>
       )}
       {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
+    </Section>
+  );
+}
+
+/** Register / list / remove passkeys (WebAuthn). */
+function PasskeysPanel({ endSession }: { endSession: () => void }) {
+  const [keys, setKeys] = useState<PasskeyInfo[] | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const supported = typeof window !== "undefined" && !!window.PublicKeyCredential;
+
+  const load = useCallback(() => {
+    listPasskeys()
+      .then(setKeys)
+      .catch((err) => {
+        if (err instanceof SessionExpiredError) { endSession(); return; }
+        setKeys([]);
+      });
+  }, [endSession]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function add() {
+    setAdding(true);
+    setError(null);
+    try {
+      await registerPasskey(`Passkey ${new Date().toLocaleDateString()}`);
+      load();
+    } catch (err) {
+      if (err instanceof SessionExpiredError) { endSession(); return; }
+      // A user cancelling the native prompt throws too; keep the message soft.
+      setError("Couldn't add a passkey. Your device may have cancelled or it's already registered.");
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  async function remove(id: string) {
+    setBusy(id);
+    setError(null);
+    try {
+      await deletePasskey(id);
+      setKeys((xs) => (xs ?? []).filter((k) => k.id !== id));
+    } catch (err) {
+      if (err instanceof SessionExpiredError) { endSession(); return; }
+      setError("Could not remove that passkey.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Section
+      title="Passkeys"
+      description="Sign in with your fingerprint, face, or device PIN. No password or code needed."
+    >
+      {!supported ? (
+        <p className="text-sm text-muted-foreground">This device or browser doesn't support passkeys.</p>
+      ) : (
+        <div className="space-y-3">
+          {keys === null ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Spinner className="h-4 w-4 animate-spin" /> Loading...
+            </div>
+          ) : keys.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No passkeys yet.</p>
+          ) : (
+            keys.map((k) => (
+              <div
+                key={k.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-background/40 p-3"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <KeyRound className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{k.name ?? "Passkey"}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Added {timeAgo(k.created_at)}
+                      {k.last_used_at ? ` · last used ${timeAgo(k.last_used_at)}` : ""}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0 rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  aria-label="Remove passkey"
+                  disabled={busy === k.id}
+                  onClick={() => remove(k.id)}
+                >
+                  {busy === k.id ? <Spinner className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                </Button>
+              </div>
+            ))
+          )}
+          <Button className="h-10 gap-2 rounded-xl font-semibold" disabled={adding} onClick={add}>
+            {adding ? <Spinner className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            Add a passkey
+          </Button>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+      )}
     </Section>
   );
 }

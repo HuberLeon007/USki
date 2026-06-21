@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { useTheme } from "next-themes";
-import { Moon, Sun, ArrowLeft } from "lucide-react";
-import { sendOtp, verifyOtp, getMe, tokenStorage, ApiError } from "@/lib/api";
+import { Moon, Sun, ArrowLeft, KeyRound } from "lucide-react";
+import { sendOtp, verifyOtp, getMe, tokenStorage, loginWithPasskey, ApiError } from "@/lib/api";
 import { useAuth } from "@/app/auth-context";
 import { Button } from "@/components/ui/button";
 import { EmailStep } from "@/components/auth/EmailStep";
@@ -48,6 +48,11 @@ export default function LoginPage() {
   // usable throughout (Requirement 11.2, 11.3, 11.5).
   const [socialLoading, setSocialLoading] = useState<Provider | null>(null);
   const [socialError, setSocialError] = useState<string | null>(null);
+
+  // Passkey (WebAuthn) sign-in state.
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
+  const [passkeyError, setPasskeyError] = useState<string | null>(null);
+  const passkeySupported = typeof window !== "undefined" && !!window.PublicKeyCredential;
 
   const otpBusy = otpStatus === "verifying" || otpStatus === "verified";
   const twofaBusy = twofaStatus === "verifying" || twofaStatus === "verified";
@@ -112,6 +117,21 @@ export default function LoginPage() {
     setError(null);
     setOtpStatus("idle");
     setOtpErrorKind(null);
+  }
+
+  // Passkey sign-in: a discoverable WebAuthn assertion mints a session directly.
+  // The passkey is itself a strong factor, so no email second factor is applied.
+  async function handlePasskey() {
+    setPasskeyError(null);
+    setPasskeyLoading(true);
+    try {
+      const s = await loginWithPasskey();
+      setSession(s.access_token, s.refresh_token, s.user_id, s.email, s.needs_username);
+      navigate("/dashboard", { replace: true });
+    } catch {
+      setPasskeyLoading(false);
+      setPasskeyError("Passkey sign-in didn't complete. Try again or use your email.");
+    }
   }
 
   // Second-factor OTP entry (social + 2FA). Reuses the OTP phase machine.
@@ -340,6 +360,20 @@ export default function LoginPage() {
                 disabled={loading}
                 error={socialError}
               />
+              {passkeySupported && (
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={handlePasskey}
+                    disabled={passkeyLoading || loading}
+                    className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-border/70 bg-card/40 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <KeyRound className="h-4 w-4" />
+                    {passkeyLoading ? "Waiting for passkey..." : "Sign in with a passkey"}
+                  </button>
+                  {passkeyError && <p className="mt-2 text-center text-sm text-destructive">{passkeyError}</p>}
+                </div>
+              )}
             </div>
           )}
         </div>

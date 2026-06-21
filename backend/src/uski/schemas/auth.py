@@ -82,6 +82,29 @@ class RevokeOthersRequest(BaseModel):
     current_key: str = Field(..., description="SHA-256 of the caller's refresh token")
 
 
+class PasskeyInfo(BaseModel):
+    """A registered passkey for the management list."""
+
+    id: str
+    name: str | None = None
+    created_at: str | None = None
+    last_used_at: str | None = None
+
+
+class PasskeyRegisterVerify(BaseModel):
+    """Browser attestation response for finishing passkey registration."""
+
+    credential: dict
+    name: str | None = None
+
+
+class PasskeyLoginVerify(BaseModel):
+    """Browser assertion response for finishing passkey login."""
+
+    handle: str
+    credential: dict
+
+
 class MessageResponse(BaseModel):
     """Generic message response."""
 
