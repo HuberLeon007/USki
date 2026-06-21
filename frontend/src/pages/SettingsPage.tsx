@@ -722,6 +722,8 @@ function SessionsPanel({ endSession }: { endSession: () => void }) {
 function PasskeysPanel({ endSession }: { endSession: () => void }) {
   const [keys, setKeys] = useState<PasskeyInfo[] | null>(null);
   const [adding, setAdding] = useState(false);
+  const [naming, setNaming] = useState(false);
+  const [name, setName] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -739,10 +741,13 @@ function PasskeysPanel({ endSession }: { endSession: () => void }) {
   useEffect(() => { load(); }, [load]);
 
   async function add() {
+    const label = name.trim() || `Passkey ${new Date().toLocaleDateString()}`;
     setAdding(true);
     setError(null);
     try {
-      await registerPasskey(`Passkey ${new Date().toLocaleDateString()}`);
+      await registerPasskey(label);
+      setName("");
+      setNaming(false);
       load();
     } catch (err) {
       if (err instanceof SessionExpiredError) { endSession(); return; }
@@ -813,10 +818,34 @@ function PasskeysPanel({ endSession }: { endSession: () => void }) {
               </div>
             ))
           )}
-          <Button className="h-10 gap-2 rounded-xl font-semibold" disabled={adding} onClick={add}>
-            {adding ? <Spinner className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            Add a passkey
-          </Button>
+          {naming ? (
+            <div className="space-y-2 rounded-xl border border-border/50 bg-background/40 p-3">
+              <label className="text-xs font-medium text-muted-foreground">Name this passkey</label>
+              <input
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") add(); if (e.key === "Escape") { setNaming(false); setName(""); } }}
+                maxLength={48}
+                placeholder="e.g. MacBook Touch ID, YubiKey"
+                className="h-10 w-full rounded-xl border border-input bg-background/60 px-3 text-sm outline-none focus-visible:border-primary/60 focus-visible:ring-4 focus-visible:ring-primary/15"
+              />
+              <div className="flex gap-2">
+                <Button className="h-10 flex-1 gap-2 rounded-xl font-semibold" disabled={adding} onClick={add}>
+                  {adding ? <Spinner className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+                  Create passkey
+                </Button>
+                <Button variant="ghost" className="h-10 rounded-xl" disabled={adding} onClick={() => { setNaming(false); setName(""); setError(null); }}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button className="h-10 gap-2 rounded-xl font-semibold" onClick={() => { setError(null); setNaming(true); }}>
+              <Plus className="h-4 w-4" />
+              Add a passkey
+            </Button>
+          )}
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
       )}

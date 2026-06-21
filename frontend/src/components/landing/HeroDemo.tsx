@@ -15,7 +15,6 @@ import {
   List,
   X,
   ChevronDown,
-  PanelLeft,
   PanelLeftClose,
   Maximize2,
   Minimize2,
@@ -259,21 +258,32 @@ export function HeroDemo(): JSX.Element {
               navCollapsed ? "w-12" : "w-48",
             )}
           >
-            <div className={cn("flex h-11 items-center gap-2", navCollapsed ? "justify-center px-0" : "px-3")}>
-              {!navCollapsed && (
-                <span className="flex items-center gap-1.5 text-sm font-bold tracking-tight">
+            <div className={cn("flex h-11 items-center", navCollapsed ? "justify-center px-0" : "gap-2 px-3")}>
+              {navCollapsed ? (
+                <button
+                  type="button"
+                  onClick={() => interactive && setNavCollapsed(false)}
+                  aria-label="Expand sidebar"
+                  className="flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-accent"
+                >
                   <img src="/logo.png" alt="" className="h-5 w-5 rounded" />
-                  <span><span className="text-primary">US</span><span className="text-foreground">ki</span></span>
-                </span>
+                </button>
+              ) : (
+                <>
+                  <span className="flex items-center gap-1.5 text-sm font-bold tracking-tight">
+                    <img src="/logo.png" alt="" className="h-5 w-5 rounded" />
+                    <span><span className="text-primary">US</span><span className="text-foreground">ki</span></span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => interactive && setNavCollapsed(true)}
+                    aria-label="Collapse sidebar"
+                    className="ml-auto flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  >
+                    <PanelLeftClose className="h-3.5 w-3.5" />
+                  </button>
+                </>
               )}
-              <button
-                type="button"
-                onClick={() => interactive && setNavCollapsed((v) => !v)}
-                aria-label={navCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                className="ml-auto flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              >
-                {navCollapsed ? <PanelLeft className="h-3.5 w-3.5" /> : <PanelLeftClose className="h-3.5 w-3.5" />}
-              </button>
             </div>
 
             <nav className="flex-1 space-y-1 px-2 py-2">

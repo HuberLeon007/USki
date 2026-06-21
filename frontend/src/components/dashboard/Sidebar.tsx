@@ -91,8 +91,8 @@ export function Sidebar({
         <nav className="flex-1 space-y-1 px-3 py-2" style={{ scrollbarGutter: "stable" }}>
           <NavItem icon={LayoutDashboard} label="Overview" collapsed={collapsed} active={view === "overview"} onClick={() => onSelectView("overview")} />
           <NavItem icon={Layers} label="Decks" collapsed={collapsed} active={view === "decks"} onClick={() => onSelectView("decks")} dataTour="nav-decks" />
-          <NavItem icon={FolderSearch} label="Browse" collapsed={collapsed} active={view === "browse"} onClick={() => onSelectView("browse")} />
-          <NavItem icon={Users} label="Shared" collapsed={collapsed} active={view === "shared"} onClick={() => onSelectView("shared")} />
+          <NavItem icon={FolderSearch} label="Browse" collapsed={collapsed} active={view === "browse"} onClick={() => onSelectView("browse")} dataTour="nav-browse" />
+          <NavItem icon={Users} label="Shared" collapsed={collapsed} active={view === "shared"} onClick={() => onSelectView("shared")} dataTour="nav-shared" />
         </nav>
 
         {/* Account footer = settings entry */}

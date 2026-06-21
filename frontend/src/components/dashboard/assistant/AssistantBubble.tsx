@@ -20,6 +20,12 @@ interface AssistantBubbleProps {
   deckId?: string | null;
   /** Reports px width reserved on the right while docked (0 otherwise). */
   onReservedWidthChange?: (px: number) => void;
+  /**
+   * Gate for the first-time auto-open greeting. While false (e.g. the guided
+   * tour is still running) Sero stays closed and does not consume its one-time
+   * greet flag; once it flips true the greeting fires as normal.
+   */
+  allowGreeting?: boolean;
 }
 
 const MIN_DOCK_WIDTH = 360;
@@ -74,7 +80,7 @@ function titleFor(messages: AssistantMessage[]): string {
   return clean.length > 42 ? clean.slice(0, 42) + "…" : clean || "New chat";
 }
 
-export function AssistantBubble({ className, dueContext, deckId, onReservedWidthChange }: AssistantBubbleProps) {
+export function AssistantBubble({ className, dueContext, deckId, onReservedWidthChange, allowGreeting = true }: AssistantBubbleProps) {
   const { user } = useAuth();
   const uid = user?.id ?? "anon";
   const [state, setState] = useState<AssistantState>("closed");
@@ -144,15 +150,17 @@ export function AssistantBubble({ className, dueContext, deckId, onReservedWidth
   }, [state, dockWidth, onReservedWidthChange]);
 
   // First-time only: pop Sero open on its own so it greets the new user once.
+  // Held back until `allowGreeting` (the guided tour finishing) so it never
+  // competes with the tour; the greet flag is only consumed once it actually opens.
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || !allowGreeting) return;
     try {
       if (!localStorage.getItem(greetedKey(uid))) {
         localStorage.setItem(greetedKey(uid), "1");
         setState((s) => (s === "closed" ? "small" : s));
       }
     } catch { /* ignore storage errors */ }
-  }, [user?.id, uid]);
+  }, [user?.id, uid, allowGreeting]);
 
   const persistHistory = useCallback((next: StoredChat[]) => {
     const capped = next.slice(0, MAX_HISTORY);
@@ -215,7 +223,8 @@ export function AssistantBubble({ className, dueContext, deckId, onReservedWidth
         `The user is called "${name}". ${ctx} ` +
         `Greet ${name} personally by name, in a ${vibe} tone. ` +
         "Add a short fun or encouraging line and make ONE concrete suggestion of how you can help today. " +
-        "Vary the greeting completely every time. Max 2 sentences, English, plain text, no bold.",
+        "Vary the greeting completely every time. Max 2 sentences, English, plain text, no bold. " +
+        "Never use em dashes or en dashes; use a plain comma, period, or hyphen instead.",
     };
     const fallback = `Hi${user?.username ? " " + user.username : ""}, I'm ${ASSISTANT_NAME}. How can I help you study today?`;
     const gid = id();
@@ -291,6 +300,7 @@ export function AssistantBubble({ className, dueContext, deckId, onReservedWidth
             exit={{ opacity: 0, scale: 0.8 }}
             transition={{ type: "spring", stiffness: 400, damping: 28 }}
             aria-label={`Open ${ASSISTANT_NAME}`}
+            data-tour="assistant"
             className={cn(
               "fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full",
               "bg-gradient-to-br from-primary to-primary/70 text-primary-foreground",

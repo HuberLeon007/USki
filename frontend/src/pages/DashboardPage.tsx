@@ -41,6 +41,13 @@ export default function DashboardPage() {
   const [welcomeSeen, setWelcomeSeen] = useState(false);
   // Interactive product tour, shown once after the username step is done.
   const [tourOpen, setTourOpen] = useState(false);
+  // True once the tour is finished/skipped (or was already done in a prior
+  // session). The welcome notification and Sero's first greeting are gated on
+  // this so they never fire on top of, or compete with, the tour.
+  const [tourDone, setTourDone] = useState<boolean>(() => {
+    try { return Boolean(localStorage.getItem(`uski.tour.done.${user?.id ?? "anon"}`)); }
+    catch { return false; }
+  });
   const redeemedRef = useRef<Set<string>>(new Set());
 
   const [view, setView] = useState<DashboardView>(() => {
@@ -130,12 +137,14 @@ export default function DashboardPage() {
   }, []);
 
   // Show a one-time welcome at the bell on the user's first visit after sign-up.
+  // Gated behind the tour: it only appears once the tour is done so the two
+  // never overlap on a brand-new account.
   useEffect(() => {
-    if (uid === "anon") return;
+    if (uid === "anon" || !tourDone) return;
     try {
       if (!localStorage.getItem(`uski.welcomed.${uid}`)) setShowWelcome(true);
     } catch { /* ignore */ }
-  }, [uid]);
+  }, [uid, tourDone]);
 
   // Run the guided product tour once, after the username step is complete so its
   // dialog never overlaps the tour. A "Replay tour" control in Settings clears
@@ -144,7 +153,8 @@ export default function DashboardPage() {
     if (uid === "anon" || needsUsername) return;
     let seen = true;
     try { seen = Boolean(localStorage.getItem(`uski.tour.done.${uid}`)); } catch { /* ignore */ }
-    if (seen) return;
+    if (seen) { setTourDone(true); return; }
+    setTourDone(false);
     const t = setTimeout(() => setTourOpen(true), 700);
     return () => clearTimeout(t);
   }, [uid, needsUsername]);
@@ -168,6 +178,17 @@ export default function DashboardPage() {
       onEnter: () => setView("decks"),
     },
     {
+      title: "Browse every card",
+      body: "Browse is a searchable view of all your cards across decks, so nothing gets lost.",
+      target: '[data-tour="nav-browse"]',
+      onEnter: () => setView("overview"),
+    },
+    {
+      title: "Shared with you",
+      body: "Decks others share land in Shared. Here you also manage who you've shared with.",
+      target: '[data-tour="nav-shared"]',
+    },
+    {
       title: "Notifications",
       body: "Activity and updates show up here at the bell.",
       target: '[data-tour="bell"]',
@@ -176,6 +197,11 @@ export default function DashboardPage() {
       title: "Settings",
       body: "Your username, theme, two-factor login, and the AI assistant all live here.",
       target: '[data-tour="settings"]',
+    },
+    {
+      title: "Meet Sero, your AI tutor",
+      body: "Sero is your built-in study buddy. Ask it to explain a card, draft new ones, or quiz you, anytime from the corner. It even knows what you have due.",
+      target: '[data-tour="assistant"]',
     },
     {
       title: "You're all set",
@@ -187,6 +213,7 @@ export default function DashboardPage() {
   function endTour() {
     try { localStorage.setItem(`uski.tour.done.${uid}`, "1"); } catch { /* ignore */ }
     setTourOpen(false);
+    setTourDone(true);
   }
   function finishTour() {
     endTour();
@@ -428,7 +455,7 @@ export default function DashboardPage() {
         </main>
       </div>
 
-      <AssistantBubble dueContext={dueContext} onReservedWidthChange={setAssistantReserved} />
+      <AssistantBubble dueContext={dueContext} onReservedWidthChange={setAssistantReserved} allowGreeting={tourDone} />
       {tourOpen && (
         <GuidedTour steps={tourSteps} onClose={endTour} onFinish={finishTour} finishLabel="Create a deck" />
       )}
@@ -588,22 +615,18 @@ function OverviewPanel({
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {primary.map(renderCard)}
             </div>
-            <AnimatePresence initial={false}>
-              {showAll && extra.length > 0 && (
-                <motion.div
-                  key="extra-decks"
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-                  className="overflow-hidden"
-                >
+            {extra.length > 0 && (
+              <div
+                className="grid overflow-hidden transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none"
+                style={{ gridTemplateRows: showAll ? "1fr" : "0fr" }}
+              >
+                <div className="min-h-0 overflow-hidden">
                   <div className="grid grid-cols-1 gap-2 pt-2 sm:grid-cols-2">
                     {extra.map(renderCard)}
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                </div>
+              </div>
+            )}
             {extra.length > 0 && (
               <button
                 onClick={() => setShowAll((v) => !v)}
