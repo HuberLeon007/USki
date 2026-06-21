@@ -299,6 +299,24 @@ export default function LoginPage() {
     <div className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden bg-background px-4">
       <CardStackBackdrop />
 
+      {/* Ambient aurora glow (same signature as the landing CTA), behind the card. */}
+      {!reduce && (
+        <>
+          <motion.div
+            aria-hidden
+            className="pointer-events-none absolute -left-32 top-1/4 h-80 w-80 rounded-full bg-primary/20 blur-[120px]"
+            animate={{ x: [0, 60, 0], y: [0, 40, 0], opacity: [0.35, 0.65, 0.35] }}
+            transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
+          />
+          <motion.div
+            aria-hidden
+            className="pointer-events-none absolute -right-28 bottom-1/4 h-80 w-80 rounded-full bg-fuchsia-500/15 blur-[120px]"
+            animate={{ x: [0, -50, 0], y: [0, -30, 0], opacity: [0.3, 0.55, 0.3] }}
+            transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
+          />
+        </>
+      )}
+
       <div className="absolute right-4 top-4 z-20">
         <Button
           variant="ghost"
