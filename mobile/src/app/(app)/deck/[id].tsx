@@ -1,15 +1,18 @@
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
 
 import {
+  deleteDeck,
   getDeck,
   listCards,
   reviewStats,
@@ -54,9 +57,30 @@ export default function DeckDetailScreen() {
     }
   }, [id, signOut]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
+
+  function confirmDeleteDeck() {
+    if (!deck) return;
+    Alert.alert("Delete deck", `"${deck.title}" and all its cards will be permanently deleted.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteDeck(deck.id);
+            router.back();
+          } catch (err) {
+            if (err instanceof SessionExpiredError) await signOut();
+          }
+        },
+      },
+    ]);
+  }
 
   if (!deck || cards === null) {
     return (
@@ -69,7 +93,25 @@ export default function DeckDetailScreen() {
 
   return (
     <View style={[styles.flex, { backgroundColor: c.background }]}>
-      <Stack.Screen options={{ title: deck.title }} />
+      <Stack.Screen
+        options={{
+          title: deck.title,
+          headerRight: () => (
+            <View style={{ flexDirection: "row", gap: 18 }}>
+              <Pressable
+                accessibilityLabel="Add card"
+                hitSlop={10}
+                onPress={() => router.push({ pathname: "/card-editor", params: { deckId: deck.id } })}
+              >
+                <Ionicons name="add" size={26} color={PRIMARY} />
+              </Pressable>
+              <Pressable accessibilityLabel="Delete deck" hitSlop={10} onPress={confirmDeleteDeck}>
+                <Ionicons name="trash-outline" size={22} color={STATE_COLORS.due} />
+              </Pressable>
+            </View>
+          ),
+        }}
+      />
       <FlatList
         contentInsetAdjustmentBehavior="automatic"
         data={cards}
@@ -108,7 +150,20 @@ export default function DeckDetailScreen() {
           <Text style={[styles.empty, { color: c.textSecondary }]}>This deck has no cards yet.</Text>
         }
         renderItem={({ item }) => (
-          <View style={[styles.card, { backgroundColor: c.backgroundElement }]}>
+          <Pressable
+            onPress={() =>
+              router.push({
+                pathname: "/card-editor",
+                params: {
+                  deckId: deck.id,
+                  cardId: item.id,
+                  front: htmlToText(item.front_html),
+                  back: htmlToText(item.back_html),
+                },
+              })
+            }
+            style={({ pressed }) => [styles.card, { backgroundColor: c.backgroundElement, opacity: pressed ? 0.7 : 1 }]}
+          >
             <Text style={[styles.front, { color: c.text }]} numberOfLines={2}>
               {htmlToText(item.front_html) || "(empty)"}
             </Text>
@@ -116,7 +171,7 @@ export default function DeckDetailScreen() {
             <Text style={[styles.back, { color: c.textSecondary }]} numberOfLines={3}>
               {htmlToText(item.back_html) || "(empty)"}
             </Text>
-          </View>
+          </Pressable>
         )}
       />
     </View>

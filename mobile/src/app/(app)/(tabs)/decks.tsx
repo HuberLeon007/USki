@@ -1,17 +1,19 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 
-import { listDecks, listGroups, SessionExpiredError, type Deck, type DeckGroup } from "@/lib/api";
+import { createGroup, listDecks, listGroups, SessionExpiredError, type Deck, type DeckGroup } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { PRIMARY, useColors } from "@/lib/ui";
 
@@ -26,6 +28,9 @@ export default function DecksScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [folderOpen, setFolderOpen] = useState(false);
+  const [folderName, setFolderName] = useState("");
+  const [folderBusy, setFolderBusy] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -44,9 +49,27 @@ export default function DecksScreen() {
     }
   }, [signOut]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
+
+  async function addFolder() {
+    const name = folderName.trim();
+    if (!name) return;
+    setFolderBusy(true);
+    try {
+      await createGroup(name);
+      setFolderName("");
+      setFolderOpen(false);
+      await load();
+    } catch (err) {
+      if (err instanceof SessionExpiredError) await signOut();
+    } finally {
+      setFolderBusy(false);
+    }
+  }
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -87,13 +110,31 @@ export default function DecksScreen() {
   }
 
   return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      style={{ backgroundColor: c.background }}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={PRIMARY} />}
-    >
+    <>
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        style={{ backgroundColor: c.background }}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={PRIMARY} />}
+      >
       {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      <View style={styles.actions}>
+        <Pressable
+          onPress={() => router.push("/new-deck")}
+          style={({ pressed }) => [styles.actionBtn, { backgroundColor: PRIMARY, opacity: pressed ? 0.85 : 1 }]}
+        >
+          <Ionicons name="add" size={18} color="#fff" />
+          <Text style={styles.actionText}>New deck</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setFolderOpen(true)}
+          style={({ pressed }) => [styles.actionBtnAlt, { borderColor: c.backgroundSelected, opacity: pressed ? 0.7 : 1 }]}
+        >
+          <Ionicons name="folder-outline" size={18} color={c.text} />
+          <Text style={[styles.actionTextAlt, { color: c.text }]}>New folder</Text>
+        </Pressable>
+      </View>
 
       {groups.map((g) => {
         const inGroup = decks.filter((d) => d.group_id === g.id);
@@ -122,14 +163,40 @@ export default function DecksScreen() {
         {ungrouped.length === 0 ? (
           <View style={[styles.empty, { borderColor: c.backgroundSelected }]}>
             <Text style={[styles.emptyBody, { color: c.textSecondary }]}>
-              No decks yet. Create one on the web app and pull to refresh.
+              No decks yet. Tap New deck to create one.
             </Text>
           </View>
         ) : (
           ungrouped.map((d) => <DeckRow key={d.id} d={d} />)
         )}
       </View>
-    </ScrollView>
+      </ScrollView>
+
+      <Modal visible={folderOpen} transparent animationType="fade" onRequestClose={() => setFolderOpen(false)}>
+        <Pressable style={styles.backdrop} onPress={() => setFolderOpen(false)}>
+          <Pressable style={[styles.sheet, { backgroundColor: c.background }]} onPress={() => {}}>
+            <Text style={[styles.sheetTitle, { color: c.text }]}>New folder</Text>
+            <TextInput
+              style={[styles.input, { color: c.text, backgroundColor: c.backgroundElement, borderColor: c.backgroundSelected }]}
+              placeholder="Folder name"
+              placeholderTextColor={c.textSecondary}
+              value={folderName}
+              onChangeText={setFolderName}
+              autoFocus
+              onSubmitEditing={addFolder}
+              returnKeyType="done"
+            />
+            <Pressable
+              onPress={addFolder}
+              disabled={folderBusy}
+              style={({ pressed }) => [styles.sheetBtn, { backgroundColor: PRIMARY, opacity: folderBusy ? 0.6 : pressed ? 0.85 : 1 }]}
+            >
+              {folderBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.sheetBtnText}>Create</Text>}
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
 
@@ -137,6 +204,17 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   content: { padding: 16, gap: 20, paddingBottom: 40 },
   error: { color: "#ef4444", fontSize: 14, textAlign: "center" },
+  actions: { flexDirection: "row", gap: 10 },
+  actionBtn: { flex: 1, flexDirection: "row", gap: 6, height: 46, borderRadius: 12, alignItems: "center", justifyContent: "center", borderCurve: "continuous" },
+  actionText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  actionBtnAlt: { flex: 1, flexDirection: "row", gap: 6, height: 46, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center", borderCurve: "continuous" },
+  actionTextAlt: { fontSize: 15, fontWeight: "600" },
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 24 },
+  sheet: { borderRadius: 18, padding: 20, gap: 12, borderCurve: "continuous" },
+  sheetTitle: { fontSize: 17, fontWeight: "700" },
+  input: { height: 50, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, fontSize: 16, borderCurve: "continuous" },
+  sheetBtn: { height: 48, borderRadius: 12, alignItems: "center", justifyContent: "center", borderCurve: "continuous" },
+  sheetBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
   section: { gap: 8 },
   sectionHead: { flexDirection: "row", alignItems: "center", gap: 8 },
   sectionTitle: { fontSize: 16, fontWeight: "700", flex: 1 },

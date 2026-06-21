@@ -250,6 +250,11 @@ export const listDecks = () => apiFetch<Deck[]>("/decks", {}, authed);
 export const listSharedDecks = () => apiFetch<Deck[]>("/decks/shared", {}, authed);
 export const getDeck = (id: string) => apiFetch<Deck>(`/decks/${id}`, {}, authed);
 export const getDeckAccess = (id: string) => apiFetch<DeckAccess>(`/decks/${id}/access`, {}, authed);
+export const createDeck = (data: { title: string; description?: string; group_id?: string | null }) =>
+  apiFetch<Deck>("/decks", { method: "POST", body: JSON.stringify(data) }, authed);
+export const updateDeck = (id: string, patch: { title?: string; description?: string; group_id?: string | null }) =>
+  apiFetch<Deck>(`/decks/${id}`, { method: "PATCH", body: JSON.stringify(patch) }, authed);
+export const deleteDeck = (id: string) => apiFetch<void>(`/decks/${id}`, { method: "DELETE" }, authed);
 
 export const reviewStats = (deckId: string) =>
   apiFetch<ReviewStats>(`/decks/${deckId}/review/stats`, {}, authed);
@@ -273,10 +278,19 @@ export const rateCard = (deckId: string, cardId: string, rating: ReviewRating) =
 
 // ── Groups (folders) ──────────────────────────────────────────────────────
 export const listGroups = () => apiFetch<DeckGroup[]>("/groups", {}, authed);
+export const createGroup = (name: string) =>
+  apiFetch<DeckGroup>("/groups", { method: "POST", body: JSON.stringify({ name }) }, authed);
+export const deleteGroup = (id: string) => apiFetch<void>(`/groups/${id}`, { method: "DELETE" }, authed);
 
 // ── Cards / browse ────────────────────────────────────────────────────────
 export const listCards = (deckId: string) => apiFetch<Card[]>(`/decks/${deckId}/cards`, {}, authed);
 export const browseCards = () => apiFetch<BrowseCard[]>("/browse/cards", {}, authed);
+export const createCard = (deckId: string, data: { front_html: string; back_html: string }) =>
+  apiFetch<Card>(`/decks/${deckId}/cards`, { method: "POST", body: JSON.stringify(data) }, authed);
+export const updateCard = (deckId: string, cardId: string, patch: { front_html?: string; back_html?: string }) =>
+  apiFetch<Card>(`/decks/${deckId}/cards/${cardId}`, { method: "PATCH", body: JSON.stringify(patch) }, authed);
+export const deleteCard = (deckId: string, cardId: string) =>
+  apiFetch<void>(`/decks/${deckId}/cards/${cardId}`, { method: "DELETE" }, authed);
 
 // ── Sharing ───────────────────────────────────────────────────────────────
 export const outgoingShares = () => apiFetch<OutgoingShare[]>("/shares/outgoing", {}, authed);

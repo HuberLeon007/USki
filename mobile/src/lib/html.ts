@@ -18,3 +18,15 @@ export function htmlToText(html: string): string {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+/**
+ * Wrap user-typed plain text back into the minimal HTML the backend stores.
+ * Escapes HTML-significant characters and turns newlines into <br>.
+ */
+export function textToHtml(text: string): string {
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return `<p>${escaped.replace(/\n/g, "<br>")}</p>`;
+}
