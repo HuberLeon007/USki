@@ -16,3 +16,6 @@ dist/
 .kiro/settings/
 *.local.json
 landing-after-rebuild.jpeg
+
+# Built mobile APK served by the web download page (too large for git)
+frontend/public/*.apk

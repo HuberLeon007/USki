@@ -47,8 +47,9 @@ export default function DownloadPage() {
         {available ? (
           <a href={APK_URL} download className="w-full">
             <Button className="w-full gap-2 rounded-2xl text-base font-semibold" style={{ height: "3.25rem" }}>
-              <Download className="h-5 w-5" /> Download the app
+              <Download className="h-5 w-5" /> Download for Android
             </Button>
+            <p className="mt-2 text-xs text-muted-foreground">APK · about 100 MB · Android 7+</p>
           </a>
         ) : (
           <div className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border/60 bg-card/60 px-4 py-3.5 text-sm font-medium text-muted-foreground">
