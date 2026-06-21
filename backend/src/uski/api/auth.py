@@ -26,7 +26,9 @@ from uski.schemas.auth import (
     MessageResponse,
     MockSocialRequest,
     RefreshRequest,
+    RevokeOthersRequest,
     SendOtpRequest,
+    SessionInfo,
     SetUsernameRequest,
     TwoFactorRequest,
     TwoFactorResponse,
@@ -40,6 +42,12 @@ from uski.services.auth_identity import (
     requires_onboarding,
     resolve_account,
 )
+from uski.services.sessions import (
+    list_sessions,
+    record_login,
+    revoke_other_sessions,
+    revoke_session,
+)
 from uski.services.mock_identity import (
     MockIdentity,
     get_mock_identity,
@@ -48,6 +56,17 @@ from uski.services.mock_identity import (
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 limiter = Limiter(key_func=get_remote_address, storage_uri=settings.rate_limit_storage_uri)
+
+
+def _client_meta(request: Request) -> tuple[str | None, str | None]:
+    """Best-effort (client IP, user-agent) for session/device tracking.
+
+    Honors X-Forwarded-For (the app sits behind the Vite dev proxy / a reverse
+    proxy in prod), falling back to the direct peer address.
+    """
+    fwd = request.headers.get("x-forwarded-for", "")
+    ip = fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else None)
+    return ip, request.headers.get("user-agent")
 
 
 def _assign_username(svc_client, user_id: str, username: str, desired_disc: str | None = None) -> str:
@@ -143,6 +162,10 @@ async def verify_otp(body: VerifyOtpRequest, request: Request) -> AuthResponse:
 
     user = response.user
     logger.info(f"User authenticated: {user.id} ({body.email})")
+
+    # Record this login as a device/session for the Security settings.
+    ip, ua = _client_meta(request)
+    record_login(user.id, session.refresh_token, ip, ua)
 
     # Check if user has set a username (first login detection)
     needs_username = True
@@ -412,6 +435,55 @@ async def set_two_factor(
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# Device / session history (Security settings)
+# ──────────────────────────────────────────────────────────────────────────
+
+
+@router.get("/sessions", response_model=list[SessionInfo])
+async def get_sessions(
+    current_key: str = Query("", description="SHA-256 of the caller's refresh token"),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> list[SessionInfo]:
+    """List the user's logged-in devices, marking the caller's current one."""
+    rows = list_sessions(current_user.id)
+    return [
+        SessionInfo(
+            id=row["id"],
+            device=row.get("device"),
+            ip=row.get("ip"),
+            city=row.get("city"),
+            country=row.get("country"),
+            lat=row.get("lat"),
+            lon=row.get("lon"),
+            created_at=row.get("created_at"),
+            last_seen_at=row.get("last_seen_at"),
+            current=bool(current_key) and row.get("session_key") == current_key,
+        )
+        for row in rows
+    ]
+
+
+@router.delete("/sessions/{session_id}", response_model=MessageResponse)
+async def delete_session(
+    session_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> MessageResponse:
+    """Sign out a single device by removing its session row."""
+    revoke_session(current_user.id, session_id)
+    return MessageResponse(message="Device signed out.")
+
+
+@router.post("/sessions/revoke-others", response_model=MessageResponse)
+async def revoke_other_sessions_endpoint(
+    body: RevokeOthersRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> MessageResponse:
+    """Sign out every device except the caller's current one."""
+    removed = revoke_other_sessions(current_user.id, body.current_key)
+    return MessageResponse(message=f"Signed out {removed} other device(s).")
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # Dev-only offline Mock_Social_Login (social-login, Requirement 5, 6.5, 7.5)
 # ──────────────────────────────────────────────────────────────────────────
 #
@@ -550,12 +622,15 @@ def _mock_social_login(body: MockSocialRequest) -> AuthResponse:
 if settings.is_dev:
 
     @router.post("/dev/mock-social", response_model=AuthResponse)
-    async def mock_social_login(body: MockSocialRequest) -> AuthResponse:
+    async def mock_social_login(body: MockSocialRequest, request: Request) -> AuthResponse:
         """Mint an offline development session for the provider's Mock_Identity.
 
         Dev-only. Contacts only the local Supabase instance, never an external
         Provider. Returns the canonical ``AuthResponse`` shared with OTP login.
         """
-        return _mock_social_login(body)
+        resp = _mock_social_login(body)
+        ip, ua = _client_meta(request)
+        record_login(resp.user_id, resp.refresh_token, ip, ua)
+        return resp
 
     logger.info("mock-social: dev-only endpoint POST /api/auth/dev/mock-social registered")

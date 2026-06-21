@@ -61,6 +61,27 @@ class TwoFactorResponse(BaseModel):
     enabled: bool
 
 
+class SessionInfo(BaseModel):
+    """One device/login session for the Security settings list."""
+
+    id: str
+    device: str | None = None
+    ip: str | None = None
+    city: str | None = None
+    country: str | None = None
+    lat: float | None = None
+    lon: float | None = None
+    created_at: str | None = None
+    last_seen_at: str | None = None
+    current: bool = False
+
+
+class RevokeOthersRequest(BaseModel):
+    """Sign out all sessions except the caller's current one."""
+
+    current_key: str = Field(..., description="SHA-256 of the caller's refresh token")
+
+
 class MessageResponse(BaseModel):
     """Generic message response."""
 

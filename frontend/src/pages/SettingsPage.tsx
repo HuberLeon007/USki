@@ -16,6 +16,9 @@ import {
   ShieldCheck,
   Sparkles,
   Compass,
+  Monitor,
+  MapPin,
+  Loader2 as Spinner,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -27,9 +30,13 @@ import {
   getMe,
   getTwoFactor,
   setTwoFactor,
+  listSessions,
+  revokeSessionById,
+  revokeOtherSessions,
   ApiError,
   SessionExpiredError,
   type UserResponse,
+  type SessionInfo,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -111,7 +118,12 @@ export default function SettingsPage() {
           )}
           {tab === "appearance" && <AppearancePanel />}
           {tab === "assistant" && <AssistantPanel />}
-          {tab === "security" && <SecurityPanel endSession={endSession} />}
+          {tab === "security" && (
+            <div className="space-y-6">
+              <SecurityPanel endSession={endSession} />
+              <SessionsPanel endSession={endSession} />
+            </div>
+          )}
         </motion.div>
       </div>
     </div>
@@ -544,6 +556,155 @@ function SecurityPanel({ endSession }: { endSession: () => void }) {
           )}
         </button>
       </div>
+      {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
+    </Section>
+  );
+}
+
+/** Relative "time ago" label for a session's last-active timestamp. */
+function timeAgo(iso: string | null): string {
+  if (!iso) return "recently";
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "recently";
+  const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+  if (s < 60) return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} h ago`;
+  const d = Math.floor(h / 24);
+  return d === 1 ? "yesterday" : `${d} days ago`;
+}
+
+/** One device row: device, location, last active, optional map, sign-out. */
+function SessionRow({ s, busy, onSignOut }: { s: SessionInfo; busy: boolean; onSignOut: () => void }) {
+  const location = s.city && s.country ? `${s.city}, ${s.country}` : s.country || (s.ip ? "Unknown location" : "Local network");
+  const hasGeo = s.lat != null && s.lon != null;
+  return (
+    <div className="rounded-xl border border-border/50 bg-background/40 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Monitor className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 text-sm font-medium">
+              {s.device ?? "Unknown device"}
+              {s.current && (
+                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-500">
+                  This device
+                </span>
+              )}
+            </p>
+            <p className="mt-0.5 flex items-center gap-1.5 text-sm text-muted-foreground">
+              <MapPin className="h-3.5 w-3.5 shrink-0" />
+              {location}
+              {s.ip ? ` · ${s.ip}` : ""}
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Last active {timeAgo(s.last_seen_at)}</p>
+          </div>
+        </div>
+        {!s.current && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 shrink-0 rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive"
+            disabled={busy}
+            onClick={onSignOut}
+          >
+            {busy ? <Spinner className="h-4 w-4 animate-spin" /> : "Sign out"}
+          </Button>
+        )}
+      </div>
+      {hasGeo && (
+        <iframe
+          title={`Map for ${s.device ?? "device"}`}
+          loading="lazy"
+          className="mt-3 h-40 w-full rounded-lg border border-border/40"
+          src={`https://www.openstreetmap.org/export/embed.html?bbox=${(s.lon as number) - 0.05}%2C${(s.lat as number) - 0.05}%2C${(s.lon as number) + 0.05}%2C${(s.lat as number) + 0.05}&layer=mapnik&marker=${s.lat}%2C${s.lon}`}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Devices & sessions list with per-device and bulk sign-out. */
+function SessionsPanel({ endSession }: { endSession: () => void }) {
+  const [sessions, setSessions] = useState<SessionInfo[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    listSessions()
+      .then(setSessions)
+      .catch((err) => {
+        if (err instanceof SessionExpiredError) { endSession(); return; }
+        setSessions([]);
+        setError("Could not load your devices.");
+      });
+  }, [endSession]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function signOutOne(id: string) {
+    setBusy(id);
+    setError(null);
+    try {
+      await revokeSessionById(id);
+      setSessions((xs) => (xs ?? []).filter((x) => x.id !== id));
+    } catch (err) {
+      if (err instanceof SessionExpiredError) { endSession(); return; }
+      setError("Could not sign out that device.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function signOutOthers() {
+    setBusy("others");
+    setError(null);
+    try {
+      await revokeOtherSessions();
+      setSessions((xs) => (xs ?? []).filter((x) => x.current));
+    } catch (err) {
+      if (err instanceof SessionExpiredError) { endSession(); return; }
+      setError("Could not sign out other devices.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const others = (sessions ?? []).filter((s) => !s.current).length;
+
+  return (
+    <Section
+      title="Devices & sessions"
+      description="Where you're signed in. Sign out anything you don't recognize."
+    >
+      {sessions === null ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Spinner className="h-4 w-4 animate-spin" /> Loading...
+        </div>
+      ) : sessions.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No active sessions found.</p>
+      ) : (
+        <div className="space-y-3">
+          {sessions.map((s) => (
+            <SessionRow key={s.id} s={s} busy={busy === s.id} onSignOut={() => signOutOne(s.id)} />
+          ))}
+          {others > 0 && (
+            <Button
+              variant="outline"
+              className="h-10 gap-2 rounded-xl text-destructive hover:text-destructive"
+              disabled={busy === "others"}
+              onClick={signOutOthers}
+            >
+              {busy === "others" ? <Spinner className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+              Sign out all other devices
+            </Button>
+          )}
+        </div>
+      )}
       {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
     </Section>
   );

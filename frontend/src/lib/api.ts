@@ -236,6 +236,46 @@ export async function setTwoFactor(enabled: boolean): Promise<TwoFactorResponse>
   );
 }
 
+// ── Devices & sessions (Security settings) ──────────────────────────────
+export interface SessionInfo {
+  id: string;
+  device: string | null;
+  ip: string | null;
+  city: string | null;
+  country: string | null;
+  lat: number | null;
+  lon: number | null;
+  created_at: string | null;
+  last_seen_at: string | null;
+  current: boolean;
+}
+
+/** SHA-256 hex of the current refresh token; identifies THIS device server-side
+ *  without ever sending the raw token to the sessions endpoints. */
+async function currentSessionKey(): Promise<string> {
+  const refresh = tokenStorage.getRefresh() ?? "";
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(refresh));
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+export async function listSessions(): Promise<SessionInfo[]> {
+  const key = await currentSessionKey();
+  return apiFetch<SessionInfo[]>(`/auth/sessions?current_key=${key}`, {}, { requireAuth: true });
+}
+
+export async function revokeSessionById(id: string): Promise<MessageResponse> {
+  return apiFetch<MessageResponse>(`/auth/sessions/${id}`, { method: "DELETE" }, { requireAuth: true });
+}
+
+export async function revokeOtherSessions(): Promise<MessageResponse> {
+  const key = await currentSessionKey();
+  return apiFetch<MessageResponse>(
+    "/auth/sessions/revoke-others",
+    { method: "POST", body: JSON.stringify({ current_key: key }) },
+    { requireAuth: true },
+  );
+}
+
 export async function refreshToken(
   refresh_token: string,
 ): Promise<AuthResponse> {
