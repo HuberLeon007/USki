@@ -1,12 +1,14 @@
 import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "motion/react";
 import { useTheme } from "next-themes";
-import { Moon, Sun } from "lucide-react";
+import { Moon, Sun, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useIsMobile } from "@/lib/use-is-mobile";
 
 export function LandingNavbar() {
   const { theme, setTheme } = useTheme();
   const reduce = useReducedMotion();
+  const isMobile = useIsMobile();
 
   return (
     <nav className="sticky top-0 z-50 border-b border-border/40 bg-background/90 backdrop-blur-xl shadow-sm shadow-primary/5">
@@ -34,7 +36,14 @@ export function LandingNavbar() {
             <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
           </Button>
           <Button asChild className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-full px-5">
-            <Link to="/login">Sign In</Link>
+            {isMobile ? (
+              <Link to="/download" className="gap-1.5">
+                <Smartphone className="h-4 w-4" />
+                Get the app
+              </Link>
+            ) : (
+              <Link to="/login">Sign In</Link>
+            )}
           </Button>
         </div>
       </div>
