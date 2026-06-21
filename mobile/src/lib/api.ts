@@ -157,6 +157,15 @@ export interface TwoFactorResponse {
   enabled: boolean;
 }
 
+export type ReviewRating = "again" | "hard" | "good" | "easy";
+
+export interface IntervalPreview {
+  again: string;
+  hard: string;
+  good: string;
+  easy: string;
+}
+
 interface FetchOpts {
   requireAuth?: boolean;
   _retried?: boolean;
@@ -244,6 +253,23 @@ export const getDeckAccess = (id: string) => apiFetch<DeckAccess>(`/decks/${id}/
 
 export const reviewStats = (deckId: string) =>
   apiFetch<ReviewStats>(`/decks/${deckId}/review/stats`, {}, authed);
+
+// ── Review / study (SRS) ──────────────────────────────────────────────────
+export const dueCards = (deckId: string) =>
+  apiFetch<Card[]>(`/decks/${deckId}/review/due`, {}, authed);
+
+export const customStudy = (deckId: string, mode: "all" | "ahead", days = 0) =>
+  apiFetch<Card[]>(`/decks/${deckId}/review/custom?mode=${mode}&days=${days}`, {}, authed);
+
+export const cardIntervals = (deckId: string, cardId: string) =>
+  apiFetch<IntervalPreview>(`/decks/${deckId}/review/${cardId}/intervals`, {}, authed);
+
+export const rateCard = (deckId: string, cardId: string, rating: ReviewRating) =>
+  apiFetch<{ card_id: string; due: string; state: number }>(
+    `/decks/${deckId}/review/${cardId}`,
+    { method: "POST", body: JSON.stringify({ rating }) },
+    authed,
+  );
 
 // ── Groups (folders) ──────────────────────────────────────────────────────
 export const listGroups = () => apiFetch<DeckGroup[]>("/groups", {}, authed);

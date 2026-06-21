@@ -152,7 +152,7 @@ export default function OverviewScreen() {
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
-                  onPress={() => router.push({ pathname: "/deck/[id]", params: { id: d.id, study: "1" } })}
+                  onPress={() => router.push({ pathname: "/study/[id]", params: { id: d.id } })}
                   style={({ pressed }) => [styles.studyBtn, { backgroundColor: PRIMARY, opacity: pressed ? 0.85 : 1 }]}
                 >
                   <Text style={styles.studyText}>Study</Text>

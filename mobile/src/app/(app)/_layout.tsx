@@ -27,6 +27,7 @@ export default function AppLayout() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="settings" options={{ title: "Settings", presentation: "modal" }} />
       <Stack.Screen name="deck/[id]" options={{ title: "Deck" }} />
+      <Stack.Screen name="study/[id]" options={{ title: "Study", presentation: "fullScreenModal" }} />
     </Stack>
   );
 }

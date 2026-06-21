@@ -1,8 +1,9 @@
-import { Stack, useLocalSearchParams } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Pressable,
   StyleSheet,
   Text,
   View,
@@ -28,6 +29,7 @@ import { STATE_COLORS, PRIMARY, useColors } from "@/lib/ui";
  */
 export default function DeckDetailScreen() {
   const c = useColors();
+  const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { signOut } = useAuth();
 
@@ -92,6 +94,13 @@ export default function DeckDetailScreen() {
                 ))}
               </View>
             ) : null}
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push({ pathname: "/study/[id]", params: { id: deck.id } })}
+              style={({ pressed }) => [styles.studyBtn, { backgroundColor: PRIMARY, opacity: pressed ? 0.85 : 1 }]}
+            >
+              <Text style={styles.studyText}>Study now</Text>
+            </Pressable>
             <Text style={[styles.cardsHead, { color: c.text }]}>{cards.length} cards</Text>
           </View>
         }
@@ -125,6 +134,8 @@ const styles = StyleSheet.create({
   statCount: { fontSize: 20, fontWeight: "800", fontVariant: ["tabular-nums"] },
   statLabel: { fontSize: 12 },
   cardsHead: { fontSize: 16, fontWeight: "700" },
+  studyBtn: { height: 50, borderRadius: 14, alignItems: "center", justifyContent: "center", borderCurve: "continuous" },
+  studyText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   card: { padding: 14, borderRadius: 14, gap: 8, borderCurve: "continuous" },
   front: { fontSize: 15, fontWeight: "600" },
   divider: { height: 1 },
