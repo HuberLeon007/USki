@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ApiError, sendOtp, verifyOtp } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { ServerSettings } from "@/components/server-settings";
 import { Colors } from "@/constants/theme";
 
 type Step = "email" | "otp";
@@ -37,6 +38,7 @@ export default function LoginScreen() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showServer, setShowServer] = useState(false);
 
   if (authenticated) return <Redirect href="/" />;
 
@@ -172,6 +174,17 @@ export default function LoginScreen() {
               <Text style={[styles.linkText, { color: c.textSecondary }]}>Use a different email</Text>
             </Pressable>
           )}
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setShowServer((v) => !v)}
+            style={styles.linkButton}
+          >
+            <Text style={[styles.linkText, { color: c.textSecondary }]}>
+              {showServer ? "Hide connection settings" : "Can't connect? Connection settings"}
+            </Text>
+          </Pressable>
+          {showServer ? <ServerSettings onSaved={() => setError(null)} /> : null}
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

@@ -13,6 +13,7 @@ import {
 
 import { changeUsername, getTwoFactor, SessionExpiredError, setTwoFactor } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { ServerSettings } from "@/components/server-settings";
 import { PRIMARY, useColors } from "@/lib/ui";
 
 function isValidUsername(v: string) {
@@ -125,6 +126,14 @@ export default function SettingsScreen() {
         <Text style={[styles.value, { color: c.textSecondary }]}>
           Follows your device light / dark setting.
         </Text>
+      </View>
+
+      <View style={[styles.section, { backgroundColor: c.backgroundElement }]}>
+        <Text style={[styles.sectionTitle, { color: c.text }]}>Server</Text>
+        <Text style={[styles.value, { color: c.textSecondary }]}>
+          Point the app at your backend (PC's LAN IP) when testing on the same WiFi.
+        </Text>
+        <ServerSettings />
       </View>
 
       <Pressable

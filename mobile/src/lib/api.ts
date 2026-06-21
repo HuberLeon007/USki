@@ -3,21 +3,67 @@ import { Platform } from "react-native";
 
 /**
  * Base URL of the USki backend. On a phone you cannot reach the PC via
- * "localhost" - it must be the PC's LAN IP. Set EXPO_PUBLIC_API_URL in
- * mobile/.env (e.g. http://192.168.1.192:8000). The backend serves under /api.
+ * "localhost" - it must be the PC's LAN IP. The default is baked at build time
+ * from EXPO_PUBLIC_API_URL, but the user can override it in-app (Settings /
+ * login) so a built APK keeps working when the PC's LAN IP changes - no rebuild.
  */
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000";
-const API_BASE = `${API_URL.replace(/\/$/, "")}/api`;
+const DEFAULT_SERVER = (process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+const SERVER_KEY = "uski_server_url";
+
+// Cached, synchronously-readable current server URL. Hydrated once at startup
+// via initServerUrl() from persistent storage; defaults to the build-time value.
+let serverUrl = DEFAULT_SERVER;
+
+const normalizeUrl = (u: string) => u.trim().replace(/\/+$/, "");
+
+/** Current backend base URL (no trailing slash, no /api suffix). */
+export function getServerUrl(): string {
+  return serverUrl;
+}
+
+const apiBase = () => `${serverUrl}/api`;
 
 const ACCESS_KEY = "uski_access_token";
 const REFRESH_KEY = "uski_refresh_token";
-
-/**
- * Token persistence. On native, SecureStore keeps the JWTs in the device
- * keychain / keystore. SecureStore is unavailable on web, so there we fall back
- * to localStorage (used by the web export only). All reads/writes go through here.
- */
 const isWeb = Platform.OS === "web";
+
+async function readStored(key: string): Promise<string | null> {
+  return isWeb ? globalThis.localStorage?.getItem(key) ?? null : SecureStore.getItemAsync(key);
+}
+async function writeStored(key: string, value: string): Promise<void> {
+  if (isWeb) globalThis.localStorage?.setItem(key, value);
+  else await SecureStore.setItemAsync(key, value);
+}
+
+/** Load any saved server-URL override into the cache. Call once at app start. */
+export async function initServerUrl(): Promise<void> {
+  try {
+    const saved = await readStored(SERVER_KEY);
+    if (saved) serverUrl = normalizeUrl(saved);
+  } catch {
+    /* keep default */
+  }
+}
+
+/** Persist and apply a new backend URL (e.g. "http://192.168.1.42:8000"). */
+export async function setServerUrl(url: string): Promise<void> {
+  serverUrl = normalizeUrl(url) || DEFAULT_SERVER;
+  try {
+    await writeStored(SERVER_KEY, serverUrl);
+  } catch {
+    /* in-memory update still applies for this session */
+  }
+}
+
+/** Quick reachability probe against GET /api/health. */
+export async function pingServer(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${normalizeUrl(url)}/api/health`, { method: "GET" });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
 
 export const tokenStorage = {
   getAccess: async (): Promise<string | null> =>
@@ -178,7 +224,7 @@ async function rawFetch<T>(path: string, options: RequestInit, token: string | n
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const res = await fetch(`${apiBase()}${path}`, { ...options, headers });
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -365,7 +411,7 @@ export async function sendChatStream(
   }
   let res: Awaited<ReturnType<typeof streamFetch>>;
   try {
-    res = await streamFetch(`${API_BASE}/chat/stream`, {
+    res = await streamFetch(`${apiBase()}/chat/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ messages, deck_id: deckId ?? null }),
@@ -422,5 +468,3 @@ export async function sendChatStream(
   }
   finish();
 }
-
-export { API_URL };

@@ -3,7 +3,7 @@
  * previews we reduce HTML to readable plain text: drop tags, collapse
  * whitespace, and decode the handful of entities the editor emits.
  */
-import { API_URL } from "./api";
+import { getServerUrl } from "./api";
 
 export function htmlToText(html: string): string {
   if (!html) return "";
@@ -41,7 +41,7 @@ export function textToHtml(text: string): string {
  * (prod) are left untouched.
  */
 export function resolveAssetUrl(src: string): string {
-  const apiHost = API_URL.replace(/^https?:\/\//, "").split(/[:/]/)[0];
+  const apiHost = getServerUrl().replace(/^https?:\/\//, "").split(/[:/]/)[0];
   if (!apiHost || apiHost === "localhost" || apiHost === "127.0.0.1") return src;
   return src.replace(
     /^(https?:\/\/)(127\.0\.0\.1|localhost)(:\d+)?/i,

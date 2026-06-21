@@ -1,6 +1,6 @@
 import { createContext, use, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { getMe, tokenStorage, type UserResponse } from "@/lib/api";
+import { getMe, initServerUrl, tokenStorage, type UserResponse } from "@/lib/api";
 
 interface AuthState {
   /** True until the persisted token has been checked on launch. */
@@ -40,6 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // On launch, restore any persisted session.
   useEffect(() => {
     (async () => {
+      await initServerUrl();
       const access = await tokenStorage.getAccess();
       if (access) await loadProfile();
       setLoading(false);
