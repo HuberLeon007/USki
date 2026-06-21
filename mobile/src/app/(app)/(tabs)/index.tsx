@@ -12,7 +12,7 @@ import {
 
 import { listDecks, reviewStats, SessionExpiredError, type Deck, type ReviewStats } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { PRIMARY, STATE_COLORS, useColors } from "@/lib/ui";
+import { PRIMARY, useColors } from "@/lib/ui";
 
 interface Totals {
   new: number;
@@ -98,29 +98,29 @@ export default function OverviewScreen() {
         {user?.username ? `Hi @${user.username}` : "Welcome back"}
       </Text>
 
-      <View style={[styles.hero, { backgroundColor: c.backgroundElement }]}>
-        <Text style={[styles.heroLabel, { color: c.textSecondary }]}>TODAY'S REVIEW</Text>
-        <Text style={[styles.heroTitle, { color: c.text }]}>
+      <View style={styles.hero}>
+        <Text style={styles.heroLabel}>TODAY'S REVIEW</Text>
+        <Text style={styles.heroTitle}>
           {toGo > 0 ? `${toGo} cards to review` : startTotal > 0 ? "All caught up for today." : "Nothing scheduled."}
         </Text>
 
         <View style={styles.statRow}>
           {([
-            ["New", totals.new, STATE_COLORS.new],
-            ["Review", totals.learning, STATE_COLORS.learning],
-            ["Due", totals.due, STATE_COLORS.due],
-          ] as const).map(([label, count, color]) => (
-            <View key={label} style={[styles.statBox, { backgroundColor: c.background }]}>
-              <Text style={[styles.statCount, { color }]}>{count}</Text>
-              <Text style={[styles.statLabel, { color: c.textSecondary }]}>{label}</Text>
+            ["New", totals.new],
+            ["Review", totals.learning],
+            ["Due", totals.due],
+          ] as const).map(([label, count]) => (
+            <View key={label} style={styles.statBox}>
+              <Text style={styles.statCount}>{count}</Text>
+              <Text style={styles.statLabel}>{label}</Text>
             </View>
           ))}
         </View>
 
-        <View style={[styles.track, { backgroundColor: c.backgroundSelected }]}>
-          <View style={[styles.fill, { width: `${pct}%`, backgroundColor: PRIMARY }]} />
+        <View style={styles.track}>
+          <View style={[styles.fill, { width: `${pct}%` }]} />
         </View>
-        <Text style={[styles.progressText, { color: c.textSecondary }]}>
+        <Text style={styles.progressText}>
           {totals.done} of {startTotal} done · {pct}%
         </Text>
       </View>
@@ -170,16 +170,23 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   content: { padding: 16, gap: 16, paddingBottom: 40 },
   hello: { fontSize: 14 },
-  hero: { borderRadius: 20, padding: 20, gap: 14, borderCurve: "continuous" },
-  heroLabel: { fontSize: 11, fontWeight: "700", letterSpacing: 1 },
-  heroTitle: { fontSize: 22, fontWeight: "800", letterSpacing: -0.3 },
+  hero: {
+    borderRadius: 20,
+    padding: 20,
+    gap: 14,
+    borderCurve: "continuous",
+    backgroundColor: PRIMARY,
+    experimental_backgroundImage: "linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)",
+  },
+  heroLabel: { fontSize: 11, fontWeight: "700", letterSpacing: 1, color: "rgba(255,255,255,0.8)" },
+  heroTitle: { fontSize: 22, fontWeight: "800", letterSpacing: -0.3, color: "#fff" },
   statRow: { flexDirection: "row", gap: 10 },
-  statBox: { flex: 1, borderRadius: 14, paddingVertical: 14, alignItems: "center", gap: 2, borderCurve: "continuous" },
-  statCount: { fontSize: 22, fontWeight: "800", fontVariant: ["tabular-nums"] },
-  statLabel: { fontSize: 12, fontWeight: "500" },
-  track: { height: 10, borderRadius: 999, overflow: "hidden" },
-  fill: { height: "100%", borderRadius: 999 },
-  progressText: { fontSize: 12, fontVariant: ["tabular-nums"] },
+  statBox: { flex: 1, borderRadius: 14, paddingVertical: 14, alignItems: "center", gap: 2, borderCurve: "continuous", backgroundColor: "rgba(255,255,255,0.16)" },
+  statCount: { fontSize: 22, fontWeight: "800", fontVariant: ["tabular-nums"], color: "#fff" },
+  statLabel: { fontSize: 12, fontWeight: "500", color: "rgba(255,255,255,0.85)" },
+  track: { height: 10, borderRadius: 999, overflow: "hidden", backgroundColor: "rgba(255,255,255,0.25)" },
+  fill: { height: "100%", borderRadius: 999, backgroundColor: "#fff" },
+  progressText: { fontSize: 12, fontVariant: ["tabular-nums"], color: "rgba(255,255,255,0.9)" },
   sectionTitle: { fontSize: 17, fontWeight: "700" },
   empty: { borderWidth: 1, borderRadius: 16, padding: 20, borderCurve: "continuous" },
   emptyBody: { fontSize: 14, lineHeight: 20, textAlign: "center" },
