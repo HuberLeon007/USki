@@ -7,21 +7,29 @@ import {
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   View,
 } from "react-native";
 
-import { getTwoFactor, SessionExpiredError, setTwoFactor } from "@/lib/api";
+import { changeUsername, getTwoFactor, SessionExpiredError, setTwoFactor } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { PRIMARY, useColors } from "@/lib/ui";
+
+function isValidUsername(v: string) {
+  return v.length >= 3 && v.length <= 20 && /^[a-z0-9]+$/.test(v);
+}
 
 /** Account + security settings, mirroring the web Settings page (mobile subset). */
 export default function SettingsScreen() {
   const c = useColors();
   const router = useRouter();
-  const { user, signOut } = useAuth();
+  const { user, signOut, refresh } = useAuth();
 
   const [twoFa, setTwoFa] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
+  const [username, setUsername] = useState(user?.username ?? "");
+  const [savingName, setSavingName] = useState(false);
+  const [nameMsg, setNameMsg] = useState<string | null>(null);
 
   useEffect(() => {
     getTwoFactor()
@@ -48,11 +56,50 @@ export default function SettingsScreen() {
     router.replace("/login");
   }
 
+  async function saveUsername() {
+    const v = username.trim().toLowerCase();
+    if (!isValidUsername(v)) {
+      setNameMsg("3-20 lowercase letters or numbers.");
+      return;
+    }
+    if (v === user?.username) return;
+    setSavingName(true);
+    setNameMsg(null);
+    try {
+      await changeUsername(v);
+      await refresh();
+      setNameMsg("Username updated.");
+    } catch (err) {
+      if (err instanceof SessionExpiredError) await signOut();
+      else setNameMsg("That username is taken or invalid.");
+    } finally {
+      setSavingName(false);
+    }
+  }
+
   return (
     <ScrollView style={{ backgroundColor: c.background }} contentContainerStyle={styles.content}>
       <View style={[styles.section, { backgroundColor: c.backgroundElement }]}>
         <Text style={[styles.sectionTitle, { color: c.text }]}>Account</Text>
-        <Row label="Username" value={user?.username ? `@${user.username}#${user.discriminator ?? ""}` : "Not set"} c={c} />
+        <Text style={[styles.label, { color: c.textSecondary }]}>Username</Text>
+        <View style={styles.nameRow}>
+          <TextInput
+            style={[styles.nameInput, { color: c.text, backgroundColor: c.background, borderColor: c.backgroundSelected }]}
+            value={username}
+            onChangeText={(t) => { setUsername(t.toLowerCase().replace(/[^a-z0-9]/g, "")); setNameMsg(null); }}
+            autoCapitalize="none"
+            autoCorrect={false}
+            maxLength={20}
+          />
+          <Pressable
+            onPress={saveUsername}
+            disabled={savingName}
+            style={({ pressed }) => [styles.saveBtn, { backgroundColor: PRIMARY, opacity: savingName ? 0.5 : pressed ? 0.85 : 1 }]}
+          >
+            {savingName ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>Save</Text>}
+          </Pressable>
+        </View>
+        {nameMsg ? <Text style={[styles.value, { color: c.textSecondary }]}>{nameMsg}</Text> : null}
         <Row label="Email" value={user?.email ?? "-"} c={c} />
       </View>
 
@@ -111,6 +158,10 @@ const styles = StyleSheet.create({
   switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   switchText: { flex: 1, gap: 2 },
   label: { fontSize: 14, fontWeight: "500" },
+  nameRow: { flexDirection: "row", gap: 8 },
+  nameInput: { flex: 1, height: 46, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, fontSize: 16, borderCurve: "continuous" },
+  saveBtn: { paddingHorizontal: 18, height: 46, borderRadius: 12, alignItems: "center", justifyContent: "center", borderCurve: "continuous" },
+  saveText: { color: "#fff", fontSize: 14, fontWeight: "700" },
   value: { fontSize: 13, lineHeight: 18 },
   logout: { height: 50, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center", borderCurve: "continuous" },
   logoutText: { color: "#ef4444", fontSize: 15, fontWeight: "600" },

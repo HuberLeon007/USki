@@ -245,6 +245,13 @@ export const getMe = () => apiFetch<UserResponse>("/auth/me", {}, authed);
 export const setUsername = (username: string) =>
   apiFetch<UserResponse>("/auth/set-username", { method: "POST", body: JSON.stringify({ username }) }, authed);
 
+export const changeUsername = (username: string, discriminator?: string) =>
+  apiFetch<UserResponse>(
+    "/auth/username",
+    { method: "PATCH", body: JSON.stringify({ username, discriminator }) },
+    authed,
+  );
+
 // ── Decks ───────────────────────────────────────────────────────────────
 export const listDecks = () => apiFetch<Deck[]>("/decks", {}, authed);
 export const listSharedDecks = () => apiFetch<Deck[]>("/decks/shared", {}, authed);
