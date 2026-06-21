@@ -12,7 +12,7 @@ import {
   type ReviewRating,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { htmlToText } from "@/lib/html";
+import { CardHtml } from "@/components/card-html";
 import { PRIMARY, STATE_COLORS, useColors } from "@/lib/ui";
 
 const GRADES: { rating: ReviewRating; label: string; color: string }[] = [
@@ -122,17 +122,13 @@ export default function StudyScreen() {
       <ScrollView contentContainerStyle={styles.cardScroll}>
         <View style={[styles.cardFace, { backgroundColor: c.backgroundElement }]}>
           <Text style={[styles.faceLabel, { color: c.textSecondary }]}>QUESTION</Text>
-          <Text style={[styles.faceText, { color: c.text }]} selectable>
-            {htmlToText(current.front_html) || "(empty)"}
-          </Text>
+          <CardHtml html={current.front_html} textStyle={[styles.faceText, { color: c.text }]} />
         </View>
 
         {revealed && (
           <View style={[styles.cardFace, { backgroundColor: c.backgroundElement }]}>
             <Text style={[styles.faceLabel, { color: c.textSecondary }]}>ANSWER</Text>
-            <Text style={[styles.faceText, { color: c.text }]} selectable>
-              {htmlToText(current.back_html) || "(empty)"}
-            </Text>
+            <CardHtml html={current.back_html} textStyle={[styles.faceText, { color: c.text }]} />
           </View>
         )}
       </ScrollView>
