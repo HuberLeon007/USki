@@ -24,11 +24,24 @@ export default function TabsLayout() {
     </Pressable>
   );
 
+  const BellButton = () => (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Notifications"
+      hitSlop={12}
+      onPress={() => router.push("/notifications")}
+      style={{ paddingHorizontal: 12 }}
+    >
+      <Ionicons name="notifications-outline" size={22} color={c.text} />
+    </Pressable>
+  );
+
   return (
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: PRIMARY,
         tabBarInactiveTintColor: c.textSecondary,
+        headerLeft: () => <BellButton />,
         headerRight: () => <SettingsButton />,
         sceneStyle: { backgroundColor: c.background },
       }}

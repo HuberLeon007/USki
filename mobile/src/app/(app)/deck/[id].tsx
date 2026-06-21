@@ -5,6 +5,7 @@ import {
   Alert,
   FlatList,
   Pressable,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -12,6 +13,7 @@ import {
 import Ionicons from "@expo/vector-icons/Ionicons";
 
 import {
+  createInvite,
   deleteDeck,
   getDeck,
   listCards,
@@ -63,6 +65,18 @@ export default function DeckDetailScreen() {
     }, [load]),
   );
 
+  async function shareDeck() {
+    if (!deck) return;
+    try {
+      const invite = await createInvite(deck.id, "read");
+      await Share.share({
+        message: `Join my USki deck "${deck.title}". In USki open Shared and redeem this code: ${invite.code}`,
+      });
+    } catch (err) {
+      if (err instanceof SessionExpiredError) await signOut();
+    }
+  }
+
   function confirmDeleteDeck() {
     if (!deck) return;
     Alert.alert("Delete deck", `"${deck.title}" and all its cards will be permanently deleted.`, [
@@ -104,6 +118,9 @@ export default function DeckDetailScreen() {
                 onPress={() => router.push({ pathname: "/card-editor", params: { deckId: deck.id } })}
               >
                 <Ionicons name="add" size={26} color={PRIMARY} />
+              </Pressable>
+              <Pressable accessibilityLabel="Share deck" hitSlop={10} onPress={shareDeck}>
+                <Ionicons name="share-outline" size={22} color={c.text} />
               </Pressable>
               <Pressable accessibilityLabel="Delete deck" hitSlop={10} onPress={confirmDeleteDeck}>
                 <Ionicons name="trash-outline" size={22} color={STATE_COLORS.due} />

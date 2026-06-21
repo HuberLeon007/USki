@@ -28,6 +28,7 @@ export default function AppLayout() {
       <Stack.Screen name="settings" options={{ title: "Settings", presentation: "modal" }} />
       <Stack.Screen name="new-deck" options={{ title: "New deck", presentation: "modal" }} />
       <Stack.Screen name="card-editor" options={{ title: "Card", presentation: "modal" }} />
+      <Stack.Screen name="notifications" options={{ title: "Notifications", presentation: "modal" }} />
       <Stack.Screen name="deck/[id]" options={{ title: "Deck" }} />
       <Stack.Screen name="study/[id]" options={{ title: "Study", presentation: "fullScreenModal" }} />
     </Stack>

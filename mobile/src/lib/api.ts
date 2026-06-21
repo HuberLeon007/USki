@@ -293,9 +293,29 @@ export const deleteCard = (deckId: string, cardId: string) =>
   apiFetch<void>(`/decks/${deckId}/cards/${cardId}`, { method: "DELETE" }, authed);
 
 // ── Sharing ───────────────────────────────────────────────────────────────
+export interface Share {
+  deck_id: string;
+  grantee_id: string;
+  permission: Permission;
+}
 export const outgoingShares = () => apiFetch<OutgoingShare[]>("/shares/outgoing", {}, authed);
 export const leaveSharedDeck = (deckId: string) =>
   apiFetch<void>(`/shares/incoming/${deckId}`, { method: "DELETE" }, authed);
+export const importDeck = (id: string) =>
+  apiFetch<Deck>(`/decks/${id}/import`, { method: "POST" }, authed);
+export const listShares = (deckId: string) => apiFetch<Share[]>(`/decks/${deckId}/shares`, {}, authed);
+export const grantShare = (deckId: string, data: { username: string; discriminator: string; permission: Permission }) =>
+  apiFetch<Share>(`/decks/${deckId}/shares`, { method: "POST", body: JSON.stringify(data) }, authed);
+export const revokeShare = (deckId: string, granteeId: string) =>
+  apiFetch<void>(`/decks/${deckId}/shares/${granteeId}`, { method: "DELETE" }, authed);
+export const createInvite = (deckId: string, permission: Permission) =>
+  apiFetch<{ code: string; deck_id: string; permission: Permission }>(
+    `/decks/${deckId}/invites`,
+    { method: "POST", body: JSON.stringify({ permission }) },
+    authed,
+  );
+export const redeemInvite = (code: string) =>
+  apiFetch<Share>("/shares/redeem", { method: "POST", body: JSON.stringify({ code }) }, authed);
 
 // ── Notifications ─────────────────────────────────────────────────────────
 export const listNotifications = () => apiFetch<Notification[]>("/notifications", {}, authed);
