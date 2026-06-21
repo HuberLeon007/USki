@@ -1,8 +1,9 @@
 import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "motion/react";
-import { ArrowRight, MousePointerClick, ChevronDown } from "lucide-react";
+import { ArrowRight, MousePointerClick, ChevronDown, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/lib/use-is-mobile";
 import { HeroDemo } from "@/components/landing/HeroDemo";
 
 const stagger = {
@@ -76,6 +77,7 @@ function HeroCards({ reduce }: { reduce: boolean }) {
 
 export function Hero() {
   const reduce = useReducedMotion();
+  const isMobile = useIsMobile();
 
   return (
     <>
@@ -123,32 +125,48 @@ export function Hero() {
             All in one place.
           </motion.p>
 
-          {/* actions — Try preview (left) + Get started (right) */}
-          <motion.div variants={fadeUp(reduce)} className="mt-9 flex flex-col items-center gap-3 sm:flex-row">
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={scrollToPreview}
-              className="gap-2 rounded-xl border-border/70 bg-card/40 px-7 backdrop-blur-sm hover:bg-accent"
-            >
-              <MousePointerClick className="h-4 w-4" />
-              Try interactive preview
-            </Button>
-            <Button
-              asChild
-              size="lg"
-              className="gap-2 rounded-xl bg-primary px-8 text-primary-foreground hover:bg-primary/90"
-            >
-              <Link to="/login">
-                Get started for free
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
+          {/* actions — on desktop: preview + get started; on phones the desktop
+              preview is useless, so we funnel straight to the native app. */}
+          <motion.div variants={fadeUp(reduce)} className="mt-9 flex w-full flex-col items-center gap-3 sm:w-auto sm:flex-row">
+            {isMobile ? (
+              <Button
+                asChild
+                size="lg"
+                className="w-full gap-2 rounded-xl bg-primary px-8 text-primary-foreground hover:bg-primary/90"
+              >
+                <Link to="/download">
+                  <Smartphone className="h-4 w-4" />
+                  Get the app
+                </Link>
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={scrollToPreview}
+                  className="gap-2 rounded-xl border-border/70 bg-card/40 px-7 backdrop-blur-sm hover:bg-accent"
+                >
+                  <MousePointerClick className="h-4 w-4" />
+                  Try interactive preview
+                </Button>
+                <Button
+                  asChild
+                  size="lg"
+                  className="gap-2 rounded-xl bg-primary px-8 text-primary-foreground hover:bg-primary/90"
+                >
+                  <Link to="/login">
+                    Get started for free
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </>
+            )}
           </motion.div>
         </motion.div>
 
-        {/* scroll hint */}
-        {!reduce && (
+        {/* scroll hint (desktop only — phones have nothing below to preview) */}
+        {!reduce && !isMobile && (
           <motion.button
             type="button"
             onClick={scrollToPreview}
@@ -163,13 +181,15 @@ export function Hero() {
         )}
       </section>
 
-      {/* ── Interactive dashboard preview (animates in on scroll) ── */}
-      <section id="preview" className="relative overflow-hidden px-4 pb-24 pt-10 md:pt-16">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_0%,hsl(263_60%_60%_/_0.07),transparent)]" />
-        <div className="relative mx-auto max-w-5xl">
-          <HeroDemo />
-        </div>
-      </section>
+      {/* ── Interactive dashboard preview (desktop only) ── */}
+      {!isMobile && (
+        <section id="preview" className="relative overflow-hidden px-4 pb-24 pt-10 md:pt-16">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_0%,hsl(263_60%_60%_/_0.07),transparent)]" />
+          <div className="relative mx-auto max-w-5xl">
+            <HeroDemo />
+          </div>
+        </section>
+      )}
     </>
   );
 }

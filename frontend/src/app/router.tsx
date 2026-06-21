@@ -16,8 +16,9 @@ const ImpressumPage = lazy(() => import("@/pages/ImpressumPage"));
 const DatenschutzPage = lazy(() => import("@/pages/DatenschutzPage"));
 const LinkApprovePage = lazy(() => import("@/pages/LinkApprovePage"));
 
-/** Routes reachable on phones too (legal pages + device-link must work there). */
-const MOBILE_ALLOWED = new Set(["/download", "/legal", "/privacy", "/link"]);
+/** Routes reachable on phones too: the marketing landing, the app-download page,
+ *  legal pages, and device-link must all work there. */
+const MOBILE_ALLOWED = new Set(["/", "/download", "/legal", "/privacy", "/link"]);
 
 function LoadingSpinner() {
   return (
@@ -42,8 +43,9 @@ function ScrollToTop() {
 }
 
 /**
- * On phones the desktop web app is not usable, so every route except the
- * download page redirects to it. Desktop/tablet are unaffected.
+ * On phones the desktop web app is not usable, so app routes (dashboard,
+ * settings, login, etc.) redirect to the app-download page. The marketing
+ * landing and legal pages stay reachable (see MOBILE_ALLOWED).
  */
 function MobileGate({ children }: { children: ReactNode }) {
   const isMobile = useIsMobile();
