@@ -92,6 +92,17 @@ class Geo:
     lon: float | None
 
 
+def location_label(geo: "Geo | None", ip: str | None) -> str:
+    """Human label for where a login came from (for emails / UI)."""
+    if geo and geo.city and geo.country:
+        return f"{geo.city}, {geo.country}"
+    if geo and geo.country:
+        return geo.country
+    if is_private_ip(ip):
+        return "Local network"
+    return "Unknown location"
+
+
 def geolocate(ip: str | None) -> Geo | None:
     """Best-effort IP geolocation; returns None for private/local IPs.
 
@@ -122,19 +133,31 @@ def geolocate(ip: str | None) -> Geo | None:
 
 
 # ── DB operations (thin adapter over service-role client) ────
-def record_login(user_id: str, refresh_token: str, ip: str | None, user_agent: str | None) -> None:
-    """Upsert the session row for this login (idempotent per refresh token)."""
-    geo = geolocate(ip)
+def record_login(
+    user_id: str,
+    refresh_token: str,
+    ip: str | None,
+    user_agent: str | None,
+    geo: "Geo | None | object" = ...,
+) -> None:
+    """Upsert the session row for this login (idempotent per refresh token).
+
+    Pass a precomputed ``geo`` to avoid a second geolocation lookup when the
+    caller already resolved it (e.g. to also build a login-alert email).
+    """
+    if geo is ...:
+        geo = geolocate(ip)
+    geo_obj = geo if isinstance(geo, Geo) else None
     row = {
         "user_id": user_id,
         "session_key": session_key_for(refresh_token),
         "device": device_from_user_agent(user_agent),
         "user_agent": user_agent,
         "ip": None if is_private_ip(ip) else ip,
-        "city": geo.city if geo else None,
-        "country": geo.country if geo else None,
-        "lat": geo.lat if geo else None,
-        "lon": geo.lon if geo else None,
+        "city": geo_obj.city if geo_obj else None,
+        "country": geo_obj.country if geo_obj else None,
+        "lat": geo_obj.lat if geo_obj else None,
+        "lon": geo_obj.lon if geo_obj else None,
         "last_seen_at": "now()",
     }
     try:

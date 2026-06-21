@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     RATE_LIMIT_SEND_OTP_IP: str = "5/minute"
     RATE_LIMIT_VERIFY_OTP_IP: str = "10/minute"
 
+    # Transactional email (welcome + login alerts). Dev records to the
+    # email_log outbox; prod delivers via Resend. EMAIL_FROM must be a verified
+    # Resend sender in prod.
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = "USki <onboarding@resend.dev>"
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.BACKEND_CORS_ORIGINS.split(",")]

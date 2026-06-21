@@ -10,7 +10,7 @@ Flow:
 4. Client logs out -> POST /api/auth/logout
 """
 
-from fastapi import APIRouter, HTTPException, Query, Request, status, Depends
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, status, Depends
 from loguru import logger
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -43,11 +43,15 @@ from uski.services.auth_identity import (
     resolve_account,
 )
 from uski.services.sessions import (
+    device_from_user_agent,
+    geolocate,
     list_sessions,
+    location_label,
     record_login,
     revoke_other_sessions,
     revoke_session,
 )
+from uski.services.email import notify_login
 from uski.services.mock_identity import (
     MockIdentity,
     get_mock_identity,
@@ -67,6 +71,26 @@ def _client_meta(request: Request) -> tuple[str | None, str | None]:
     fwd = request.headers.get("x-forwarded-for", "")
     ip = fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else None)
     return ip, request.headers.get("user-agent")
+
+
+def _capture_login(
+    user_id: str,
+    email: str | None,
+    refresh_token: str,
+    request: Request,
+    background: BackgroundTasks,
+) -> None:
+    """Record the device/session and schedule welcome + login-alert emails.
+
+    Geolocation is resolved once and shared between the session row and the
+    email. Email sending runs in the background so it never slows the login.
+    """
+    ip, ua = _client_meta(request)
+    geo = geolocate(ip)
+    record_login(user_id, refresh_token, ip, ua, geo=geo)
+    device = device_from_user_agent(ua)
+    location = location_label(geo, ip)
+    background.add_task(notify_login, email, None, device, location)
 
 
 def _assign_username(svc_client, user_id: str, username: str, desired_disc: str | None = None) -> str:
@@ -134,7 +158,7 @@ async def send_otp(body: SendOtpRequest, request: Request) -> MessageResponse:
 
 @router.post("/verify-otp", response_model=AuthResponse)
 @limiter.limit(settings.RATE_LIMIT_VERIFY_OTP_IP)
-async def verify_otp(body: VerifyOtpRequest, request: Request) -> AuthResponse:
+async def verify_otp(body: VerifyOtpRequest, request: Request, background: BackgroundTasks) -> AuthResponse:
     """Verify the 6-digit OTP code and return session tokens."""
     client = get_supabase_anon_client()
 
@@ -163,9 +187,8 @@ async def verify_otp(body: VerifyOtpRequest, request: Request) -> AuthResponse:
     user = response.user
     logger.info(f"User authenticated: {user.id} ({body.email})")
 
-    # Record this login as a device/session for the Security settings.
-    ip, ua = _client_meta(request)
-    record_login(user.id, session.refresh_token, ip, ua)
+    # Record this login (device/session + welcome/login-alert emails).
+    _capture_login(user.id, body.email, session.refresh_token, request, background)
 
     # Check if user has set a username (first login detection)
     needs_username = True
@@ -622,15 +645,14 @@ def _mock_social_login(body: MockSocialRequest) -> AuthResponse:
 if settings.is_dev:
 
     @router.post("/dev/mock-social", response_model=AuthResponse)
-    async def mock_social_login(body: MockSocialRequest, request: Request) -> AuthResponse:
+    async def mock_social_login(body: MockSocialRequest, request: Request, background: BackgroundTasks) -> AuthResponse:
         """Mint an offline development session for the provider's Mock_Identity.
 
         Dev-only. Contacts only the local Supabase instance, never an external
         Provider. Returns the canonical ``AuthResponse`` shared with OTP login.
         """
         resp = _mock_social_login(body)
-        ip, ua = _client_meta(request)
-        record_login(resp.user_id, resp.refresh_token, ip, ua)
+        _capture_login(resp.user_id, resp.email, resp.refresh_token, request, background)
         return resp
 
     logger.info("mock-social: dev-only endpoint POST /api/auth/dev/mock-social registered")
