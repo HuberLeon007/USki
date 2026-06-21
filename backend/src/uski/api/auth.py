@@ -26,6 +26,7 @@ from uski.schemas.auth import (
     ChangeUsernameRequest,
     MessageResponse,
     MockSocialRequest,
+    LinkApproveRequest,
     PasskeyInfo,
     PasskeyLoginVerify,
     PasskeyRegisterVerify,
@@ -47,6 +48,7 @@ from uski.services.auth_identity import (
     resolve_account,
 )
 from uski.services import passkeys as passkeys_svc
+from uski.services import device_link
 from uski.services.sessions import (
     device_from_user_agent,
     geolocate,
@@ -606,6 +608,45 @@ async def passkey_login_verify(
         email=email,
         needs_username=needs_username,
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Cross-device sign-in (QR / device link)
+# ──────────────────────────────────────────────────────────────────────────
+
+
+@router.post("/link/start")
+async def link_start() -> dict:
+    """A signed-out device starts a link request; returns the code for its QR."""
+    return {"code": device_link.start()}
+
+
+@router.get("/link/poll")
+async def link_poll(code: str = Query(...)) -> dict:
+    """The signed-out device polls; once approved it claims the session (once)."""
+    return device_link.claim(code)
+
+
+@router.post("/link/approve", response_model=MessageResponse)
+async def link_approve(
+    body: LinkApproveRequest,
+    request: Request,
+    background: BackgroundTasks,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> MessageResponse:
+    """An already-signed-in device approves the link, minting a fresh session."""
+    svc = get_supabase_client()
+    row = svc.table("user").select("email, username").eq("id", current_user.id).execute()
+    email = (row.data[0].get("email") if row.data else None) or current_user.email
+    if not email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Account has no email")
+    needs_username = bool(row.data and row.data[0].get("username") is None)
+
+    access_token, refresh_token, uid = _mint_local_session(svc, get_supabase_anon_client(), email)
+    if not device_link.approve(body.code, uid, email, access_token, refresh_token, needs_username):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This sign-in request is invalid or expired")
+    _capture_login(uid, email, refresh_token, request, background)
+    return MessageResponse(message="Device approved. It will sign in shortly.")
 
 
 # ──────────────────────────────────────────────────────────────────────────

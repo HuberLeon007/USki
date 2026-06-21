@@ -14,9 +14,10 @@ const DeckDetailPage = lazy(() => import("@/pages/DeckDetailPage"));
 const DownloadPage = lazy(() => import("@/pages/DownloadPage"));
 const ImpressumPage = lazy(() => import("@/pages/ImpressumPage"));
 const DatenschutzPage = lazy(() => import("@/pages/DatenschutzPage"));
+const LinkApprovePage = lazy(() => import("@/pages/LinkApprovePage"));
 
-/** Routes reachable on phones too (legal pages must stay accessible everywhere). */
-const MOBILE_ALLOWED = new Set(["/download", "/legal", "/privacy"]);
+/** Routes reachable on phones too (legal pages + device-link must work there). */
+const MOBILE_ALLOWED = new Set(["/download", "/legal", "/privacy", "/link"]);
 
 function LoadingSpinner() {
   return (
@@ -80,6 +81,7 @@ export function AppRouter() {
           <Route path="/download" element={<DownloadPage />} />
           <Route path="/legal" element={<ImpressumPage />} />
           <Route path="/privacy" element={<DatenschutzPage />} />
+          <Route path="/link" element={<LinkApprovePage />} />
           {/* Legacy German paths kept as redirects so old links still resolve. */}
           <Route path="/impressum" element={<Navigate to="/legal" replace />} />
           <Route path="/datenschutz" element={<Navigate to="/privacy" replace />} />

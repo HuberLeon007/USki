@@ -322,6 +322,30 @@ export async function loginWithPasskey(): Promise<AuthResponse> {
   );
 }
 
+// ── Cross-device sign-in (QR / device link) ─────────────────────────────
+export type LinkPoll =
+  | { status: "pending" | "expired" | "not_found" }
+  | { status: "approved"; session: AuthResponse };
+
+/** Signed-out device: start a link request, returns the code for the QR. */
+export async function linkStart(): Promise<{ code: string }> {
+  return apiFetch<{ code: string }>("/auth/link/start", { method: "POST", body: "{}" });
+}
+
+/** Signed-out device: poll until the request is approved (then claims it once). */
+export async function linkPoll(code: string): Promise<LinkPoll> {
+  return apiFetch<LinkPoll>(`/auth/link/poll?code=${encodeURIComponent(code)}`);
+}
+
+/** Signed-in device: approve a scanned link code, minting a session for it. */
+export async function linkApprove(code: string): Promise<MessageResponse> {
+  return apiFetch<MessageResponse>(
+    "/auth/link/approve",
+    { method: "POST", body: JSON.stringify({ code }) },
+    { requireAuth: true },
+  );
+}
+
 export async function refreshToken(
   refresh_token: string,
 ): Promise<AuthResponse> {

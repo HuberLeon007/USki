@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { useTheme } from "next-themes";
-import { Moon, Sun, ArrowLeft, KeyRound } from "lucide-react";
-import { sendOtp, verifyOtp, getMe, tokenStorage, loginWithPasskey, ApiError } from "@/lib/api";
+import { Moon, Sun, ArrowLeft, KeyRound, MonitorSmartphone } from "lucide-react";
+import QRCode from "react-qr-code";
+import { sendOtp, verifyOtp, getMe, tokenStorage, loginWithPasskey, linkStart, linkPoll, ApiError } from "@/lib/api";
 import { useAuth } from "@/app/auth-context";
 import { Button } from "@/components/ui/button";
 import { EmailStep } from "@/components/auth/EmailStep";
@@ -53,6 +54,53 @@ export default function LoginPage() {
   const [passkeyLoading, setPasskeyLoading] = useState(false);
   const [passkeyError, setPasskeyError] = useState<string | null>(null);
   const passkeySupported = typeof window !== "undefined" && !!window.PublicKeyCredential;
+
+  // Cross-device (QR) sign-in state.
+  const [linkMode, setLinkMode] = useState(false);
+  const [linkCode, setLinkCode] = useState<string | null>(null);
+  const [linkError, setLinkError] = useState<string | null>(null);
+
+  // Poll for approval while a QR code is active; install the session on approve.
+  useEffect(() => {
+    if (!linkCode) return;
+    let alive = true;
+    const tick = async () => {
+      try {
+        const r = await linkPoll(linkCode);
+        if (!alive) return;
+        if (r.status === "approved") {
+          const s = r.session;
+          setSession(s.access_token, s.refresh_token, s.user_id, s.email, s.needs_username);
+          navigate("/dashboard", { replace: true });
+        } else if (r.status === "expired" || r.status === "not_found") {
+          setLinkCode(null);
+          setLinkError("That code expired. Generate a new one.");
+        }
+      } catch {
+        /* transient; keep polling */
+      }
+    };
+    const iv = setInterval(tick, 2000);
+    return () => { alive = false; clearInterval(iv); };
+  }, [linkCode, setSession, navigate]);
+
+  async function startLink() {
+    setLinkError(null);
+    setLinkMode(true);
+    setLinkCode(null);
+    try {
+      const { code } = await linkStart();
+      setLinkCode(code);
+    } catch {
+      setLinkError("Couldn't start device sign-in. Please try again.");
+    }
+  }
+
+  function cancelLink() {
+    setLinkMode(false);
+    setLinkCode(null);
+    setLinkError(null);
+  }
 
   const otpBusy = otpStatus === "verifying" || otpStatus === "verified";
   const twofaBusy = twofaStatus === "verifying" || twofaStatus === "verified";
@@ -277,6 +325,32 @@ export default function LoginPage() {
 
         {/* Auth surface — a single raised card, the focal layer of the stack */}
         <div className="rounded-2xl border border-border/70 bg-card/80 p-8 backdrop-blur-xl stack-glow sm:p-9">
+          {linkMode ? (
+            <div className="text-center">
+              <button
+                onClick={cancelLink}
+                className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" /> Back
+              </button>
+              <h1 className="text-xl font-semibold tracking-tight">Sign in from another device</h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                On a device where you're already signed in, scan this code (or open the link) and approve.
+              </p>
+              <div className="mx-auto mt-6 flex h-48 w-48 items-center justify-center rounded-2xl bg-white p-3">
+                {linkCode ? (
+                  <QRCode value={`${window.location.origin}/link?code=${linkCode}`} className="h-full w-full" />
+                ) : (
+                  <span className="text-sm text-slate-500">Generating...</span>
+                )}
+              </div>
+              <p className="mt-4 inline-flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-primary" /> Waiting for approval...
+              </p>
+              {linkError && <p className="mt-3 text-sm text-destructive">{linkError}</p>}
+            </div>
+          ) : (
+          <>
           <div className="mb-6 space-y-1.5">
             <AnimatePresence mode="wait">
               <motion.div
@@ -374,7 +448,17 @@ export default function LoginPage() {
                   {passkeyError && <p className="mt-2 text-center text-sm text-destructive">{passkeyError}</p>}
                 </div>
               )}
+              <button
+                type="button"
+                onClick={startLink}
+                className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-border/70 bg-card/40 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                <MonitorSmartphone className="h-4 w-4" />
+                Sign in from another device
+              </button>
             </div>
+          )}
+          </>
           )}
         </div>
 

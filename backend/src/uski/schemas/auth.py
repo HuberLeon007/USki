@@ -105,6 +105,12 @@ class PasskeyLoginVerify(BaseModel):
     credential: dict
 
 
+class LinkApproveRequest(BaseModel):
+    """Approve a cross-device sign-in by its QR code."""
+
+    code: str
+
+
 class MessageResponse(BaseModel):
     """Generic message response."""
 
