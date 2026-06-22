@@ -20,7 +20,7 @@ export default function AppLayout() {
     );
   }
 
-  if (!authenticated) return <Redirect href="/login" />;
+  if (!authenticated) return <Redirect href="/welcome" />;
 
   return (
     <Stack>
