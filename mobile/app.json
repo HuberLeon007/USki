@@ -8,7 +8,8 @@
     "scheme": "uski",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/images/logo.png"
+      "icon": "./assets/images/logo.png",
+      "associatedDomains": ["webcredentials:uski.huberleon.com"]
     },
     "android": {
       "package": "com.uski.app",

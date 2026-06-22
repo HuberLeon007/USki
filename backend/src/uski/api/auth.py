@@ -693,7 +693,9 @@ async def passkey_register_verify(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> PasskeyInfo:
     """Finish passkey registration: verify attestation and store the credential."""
-    origin = request.headers.get("origin")
+    # Prefer the origin baked into the credential (works for web AND native, where
+    # there is no browser Origin header); fall back to the header for old clients.
+    origin = passkeys_svc.origin_from_credential(json.dumps(body.credential)) or request.headers.get("origin")
     if not passkeys_svc.origin_allowed(origin):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Untrusted origin")
     try:
@@ -744,7 +746,7 @@ async def passkey_login_verify(
     background: BackgroundTasks,
 ) -> AuthResponse:
     """Finish passkey login: verify the assertion and mint a real session."""
-    origin = request.headers.get("origin")
+    origin = passkeys_svc.origin_from_credential(json.dumps(body.credential)) or request.headers.get("origin")
     if not passkeys_svc.origin_allowed(origin):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Untrusted origin")
 

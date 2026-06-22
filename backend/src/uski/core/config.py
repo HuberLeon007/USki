@@ -51,7 +51,11 @@ class Settings(BaseSettings):
 
     # Passkeys / WebAuthn. RP_ID is the registrable domain (no scheme/port);
     # "localhost" covers the dev ports. WEBAUTHN_ORIGINS is the allow-list of
-    # full page origins the ceremony may come from. Set both for prod.
+    # full page origins the ceremony may come from. Set both for prod, e.g.
+    #   WEBAUTHN_RP_ID=uski.huberleon.com
+    #   WEBAUTHN_ORIGINS=https://uski.huberleon.com,android:apk-key-hash:<base64url-sha256-of-the-APK-signing-cert>
+    # The android:apk-key-hash origin lets the Android app's passkeys verify;
+    # get the SHA-256 from `eas credentials` after the first build (see PRODUCTION.md).
     WEBAUTHN_RP_ID: str = "localhost"
     WEBAUTHN_RP_NAME: str = "USki"
     WEBAUTHN_ORIGINS: str = "http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174"

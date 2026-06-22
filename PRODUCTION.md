@@ -114,8 +114,8 @@ See `.env.example` for the full list with comments (PROD-ONLY section). The esse
 | `AI_EMBED_MODEL` | `nomic-embed-text` (768d — don't change) |
 | `AI_PROVIDERS_FILE` | `ai_providers.json` (chat pool, REQUIRED) |
 | `RESEND_API_KEY` / `EMAIL_FROM` | Resend + verified `huberleon.com` sender |
-| `WEBAUTHN_RP_ID` | `huberleon.com` |
-| `WEBAUTHN_ORIGINS` | `https://huberleon.com` |
+| `WEBAUTHN_RP_ID` | `uski.huberleon.com` (the live web origin's domain) |
+| `WEBAUTHN_ORIGINS` | `https://uski.huberleon.com` (+ the Android `android:apk-key-hash:…` once you build the APK — see Passkeys) |
 | `CLOUDFLARE_TUNNEL_TOKEN` | from the Zero Trust tunnel |
 
 Secrets (`SUPABASE_SERVICE_ROLE_KEY`, `ai_providers.json`, `RESEND_API_KEY`,
@@ -150,11 +150,36 @@ It's all free (Google/GitHub/Discord OAuth + Supabase free tier).
 
 ## Passkeys
 
-- **Web**: works in prod (set `WEBAUTHN_RP_ID=huberleon.com` + `WEBAUTHN_ORIGINS`).
-- **Mobile**: NOT available in Expo Go — native passkeys need a custom dev-client
-  / standalone build plus platform domain association (iOS Associated Domains,
-  Android Digital Asset Links pointing at huberleon.com). Deferred; mobile users
-  sign in with email OTP or the social buttons. Add later on the EAS-build path.
+- **Web**: works in prod. Set `WEBAUTHN_RP_ID=uski.huberleon.com` and
+  `WEBAUTHN_ORIGINS=https://uski.huberleon.com` in the server `.env`, then
+  `docker compose -f docker-compose.prod.yml up -d` to apply.
+- **Mobile (Android APK)**: native passkeys are built in (react-native-passkey),
+  but they only work in a real build (APK / dev-client), NOT in Expo Go, and need
+  a one-time domain binding after the first build. Runbook:
+
+  1. Build the APK once: `cd mobile && eas login && eas build -p android --profile preview`.
+  2. Get the app's signing-cert fingerprint:
+     `eas credentials` → Android → your profile → copy the **SHA-256** (form `AB:CD:…`).
+  3. **assetlinks.json** — edit `frontend/public/.well-known/assetlinks.json`,
+     replacing `REPLACE_WITH_APK_SIGNING_SHA256_FROM_eas_credentials` with that
+     SHA-256 (keep the colons), commit, and redeploy the web container so it's
+     live at `https://uski.huberleon.com/.well-known/assetlinks.json` (Caddy
+     already serves it). The package is `com.uski.app`.
+  4. **Backend origin allow-list** — the Android passkey ceremony's origin is
+     `android:apk-key-hash:<base64url-sha256-of-the-same-cert>`. Either read it
+     from the backend logs on the first failed attempt (it logs the untrusted
+     origin) or convert the SHA-256: it's the base64url (no padding) of the raw
+     32 cert bytes. Add it to `WEBAUTHN_ORIGINS`, e.g.
+     `WEBAUTHN_ORIGINS=https://uski.huberleon.com,android:apk-key-hash:XXXX`,
+     then restart the backend.
+  5. Re-test on the phone: Settings → Security → **Add a passkey**, then sign out
+     and use **Sign in with a passkey** on the login screen.
+
+  Notes: the backend derives the ceremony origin from the credential's
+  clientDataJSON (so the app sends no browser Origin header), and the OS only
+  permits a passkey for `uski.huberleon.com` once assetlinks.json lists the
+  app — so step 3 gates step 4. iOS would also need an Apple dev account + the
+  `apple-app-site-association` file (not set up; Android-only for now).
 
 ## Caveats / honest notes
 - **Uptime = school server uptime.** If it's powered off (night/holidays) or the

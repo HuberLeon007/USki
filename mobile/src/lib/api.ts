@@ -446,6 +446,41 @@ export const disableTotp = (code: string) =>
 export const verifyTwoFactorChallenge = (challenge: string, code: string) =>
   apiFetch<AuthResponse>("/auth/2fa/challenge/verify", { method: "POST", body: JSON.stringify({ challenge, code }) });
 
+// ── Passkeys / WebAuthn ───────────────────────────────────────────────────
+export interface PasskeyInfo {
+  id: string;
+  name: string | null;
+  created_at?: string | null;
+  last_used_at?: string | null;
+}
+
+/** Registration options (PublicKeyCredentialCreationOptionsJSON) for the OS. */
+export const passkeyRegisterOptions = () =>
+  apiFetch<Record<string, unknown>>("/auth/passkeys/register/options", { method: "POST" }, authed);
+
+/** Persist a freshly created passkey. `credential` is the OS attestation JSON. */
+export const passkeyRegisterVerify = (credential: unknown, name?: string) =>
+  apiFetch<PasskeyInfo>(
+    "/auth/passkeys/register/verify",
+    { method: "POST", body: JSON.stringify({ credential, name }) },
+    authed,
+  );
+
+export const listPasskeys = () => apiFetch<PasskeyInfo[]>("/auth/passkeys", {}, authed);
+export const deletePasskey = (id: string) =>
+  apiFetch<MessageResponse>(`/auth/passkeys/${id}`, { method: "DELETE" }, authed);
+
+/** Discoverable-login options + a handle echoed back on verify (pre-auth). */
+export const passkeyLoginOptions = () =>
+  apiFetch<{ options: Record<string, unknown>; handle: string }>("/auth/passkeys/login/options", { method: "POST" });
+
+/** Finish passkey login: assertion JSON + handle -> session tokens (pre-auth). */
+export const passkeyLoginVerify = (handle: string, credential: unknown) =>
+  apiFetch<AuthResponse>(
+    "/auth/passkeys/login/verify",
+    { method: "POST", body: JSON.stringify({ handle, credential }) },
+  );
+
 // ── Devices & sessions ────────────────────────────────────────────────────
 export interface SessionInfo {
   id: string;

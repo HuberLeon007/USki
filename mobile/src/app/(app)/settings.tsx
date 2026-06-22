@@ -13,16 +13,20 @@ import {
 
 import {
   changeUsername,
+  deletePasskey,
   disableTotp,
   getTotpStatus,
+  listPasskeys,
   listSessions,
   revokeSessionById,
   SessionExpiredError,
   setupTotp,
   verifyTotp,
+  type PasskeyInfo,
   type SessionInfo,
   type TotpSetup,
 } from "@/lib/api";
+import { registerPasskey, passkeysSupported } from "@/lib/passkey";
 import { useAuth } from "@/lib/auth";
 import { ServerSettings } from "@/components/server-settings";
 import { Icon } from "@/components/icon";
@@ -95,10 +99,7 @@ export default function SettingsScreen() {
       <Section title="Security" c={c}>
         <TotpPanel c={c} onExpired={logout} />
         <View style={[styles.divider, { backgroundColor: c.backgroundSelected }]} />
-        <Text style={[styles.label, { color: c.text }]}>Passkeys</Text>
-        <Text style={[styles.value, { color: c.textSecondary }]}>
-          Add or remove passkeys from the web app at uski. They sign you in here without a code.
-        </Text>
+        <PasskeyPanel c={c} onExpired={logout} />
         <View style={[styles.divider, { backgroundColor: c.backgroundSelected }]} />
         <SessionsPanel c={c} onExpired={logout} />
       </Section>
@@ -221,6 +222,83 @@ function TotpPanel({ c, onExpired }: { c: C; onExpired: () => void }) {
         <View style={{ gap: 8 }}>
           <Text style={[styles.value, { color: c.textSecondary }]}>Off - sign in with one step only.</Text>
           <SmallButton label="Set up" onPress={begin} c={c} busy={busy} />
+        </View>
+      )}
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+    </View>
+  );
+}
+
+/** Passkeys: list the user's registered passkeys and add/remove them. Native
+ *  WebAuthn via the OS credential manager (works in a real build, not Expo Go).
+ *  Falls back to a hint when the device/build doesn't support passkeys. */
+function PasskeyPanel({ c, onExpired }: { c: C; onExpired: () => void }) {
+  const supported = passkeysSupported();
+  const [keys, setKeys] = useState<PasskeyInfo[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!supported) { setKeys([]); return; }
+    listPasskeys().then(setKeys).catch((e) => {
+      if (e instanceof SessionExpiredError) onExpired();
+      else setKeys([]);
+    });
+  }, [supported, onExpired]);
+
+  const add = useCallback(async () => {
+    setBusy(true); setError(null);
+    try {
+      const created = await registerPasskey();
+      setKeys((xs) => [created, ...(xs ?? [])]);
+    } catch (e) {
+      if (e instanceof SessionExpiredError) onExpired();
+      else setError("Couldn't add a passkey. Make sure your device has a screen lock set up.");
+    } finally { setBusy(false); }
+  }, [onExpired]);
+
+  const remove = useCallback(async (id: string) => {
+    setRemoving(id); setError(null);
+    try {
+      await deletePasskey(id);
+      setKeys((xs) => (xs ?? []).filter((k) => k.id !== id));
+    } catch (e) {
+      if (e instanceof SessionExpiredError) onExpired();
+      else setError("Couldn't remove that passkey.");
+    } finally { setRemoving(null); }
+  }, [onExpired]);
+
+  return (
+    <View style={{ gap: 8 }}>
+      <Text style={[styles.label, { color: c.text }]}>Passkeys</Text>
+      {!supported ? (
+        <Text style={[styles.value, { color: c.textSecondary }]}>
+          This device or build doesn't support passkeys. Add them in the web app at uski.huberleon.com.
+        </Text>
+      ) : keys === null ? (
+        <ActivityIndicator color={c.textSecondary} />
+      ) : (
+        <View style={{ gap: 8 }}>
+          <Text style={[styles.value, { color: c.textSecondary }]}>
+            Sign in without a code using your fingerprint, face or device PIN.
+          </Text>
+          {keys.map((k) => (
+            <View key={k.id} style={[styles.sessionRow, { borderColor: c.backgroundSelected }]}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[styles.label, { color: c.text }]} numberOfLines={1}>{k.name ?? "Passkey"}</Text>
+                {k.last_used_at ? (
+                  <Text style={[styles.value, { color: c.textSecondary }]} numberOfLines={1}>
+                    Last used {new Date(k.last_used_at).toLocaleDateString()}
+                  </Text>
+                ) : null}
+              </View>
+              <Pressable onPress={() => remove(k.id)} disabled={removing === k.id} hitSlop={8}>
+                <Text style={[styles.signOut, { opacity: removing === k.id ? 0.5 : 1 }]}>Remove</Text>
+              </Pressable>
+            </View>
+          ))}
+          <SmallButton label="Add a passkey" onPress={add} c={c} busy={busy} />
         </View>
       )}
       {error ? <Text style={styles.error}>{error}</Text> : null}

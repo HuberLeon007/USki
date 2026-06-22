@@ -12,6 +12,14 @@
 		reverse_proxy backend:8000
 	}
 
+	# Android passkey domain binding (Digital Asset Links). Served as static
+	# JSON, never the SPA fallback, so the OS can fetch it to allow passkeys.
+	handle /.well-known/assetlinks.json {
+		root * /srv
+		header Content-Type application/json
+		file_server
+	}
+
 	# Everything else → the static SPA, with history-API fallback.
 	handle {
 		root * /srv

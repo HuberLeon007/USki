@@ -51,6 +51,32 @@ def origin_allowed(origin: str | None) -> bool:
     return bool(origin) and origin in settings.webauthn_origins_list
 
 
+def origin_from_credential(credential_json: str) -> str | None:
+    """Extract the ceremony origin from a credential's clientDataJSON.
+
+    The browser/authenticator records the true origin inside clientDataJSON and
+    py_webauthn verifies the assertion against it, so this is the authoritative
+    origin to allow-list against - more reliable than the HTTP ``Origin`` header.
+    It is the only way native apps (which send no browser ``Origin`` header) can
+    pass the check: on Android the value is ``android:apk-key-hash:<hash>``,
+    which must be added to WEBAUTHN_ORIGINS. Returns None when it can't be read.
+    """
+    import base64
+    import json as _json
+
+    try:
+        cred = _json.loads(credential_json)
+        cdj = (cred.get("response") or {}).get("clientDataJSON")
+        if not cdj:
+            return None
+        padded = cdj + "=" * (-len(cdj) % 4)
+        data = base64.urlsafe_b64decode(padded)
+        origin = _json.loads(data).get("origin")
+        return origin if isinstance(origin, str) else None
+    except Exception:  # noqa: BLE001 - a malformed blob just yields "no origin"
+        return None
+
+
 # ── challenge store ──────────────────────────────────────────
 def _save_challenge(handle: str, kind: str, challenge: bytes) -> None:
     get_supabase_client().table(_CHAL).upsert(

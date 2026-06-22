@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ApiError, sendOtp, verifyOtp, verifyTwoFactorChallenge } from "@/lib/api";
 import { signInWithProvider, supabaseConfigured, type Provider } from "@/lib/social";
+import { loginWithPasskey, passkeysSupported } from "@/lib/passkey";
 import { useAuth } from "@/lib/auth";
 import { ServerSettings } from "@/components/server-settings";
 import { Colors } from "@/constants/theme";
@@ -40,10 +41,30 @@ export default function LoginScreen() {
   const [challenge, setChallenge] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [socialBusy, setSocialBusy] = useState<Provider | null>(null);
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showServer, setShowServer] = useState(false);
+  const canPasskey = passkeysSupported();
 
   if (authenticated) return <Redirect href="/" />;
+
+  async function onPasskey() {
+    setPasskeyBusy(true);
+    setError(null);
+    try {
+      const r = await loginWithPasskey();
+      if (r.ok) {
+        await signIn(r.access_token, r.refresh_token);
+        router.replace("/");
+        return;
+      }
+      if (!r.cancelled && !r.unsupported) setError(r.error ?? "Passkey sign-in failed.");
+    } catch {
+      setError("Passkey sign-in failed. Try again.");
+    } finally {
+      setPasskeyBusy(false);
+    }
+  }
 
   async function onSocial(provider: Provider) {
     setSocialBusy(provider);
@@ -224,6 +245,25 @@ export default function LoginScreen() {
               <Text style={[styles.linkText, { color: c.textSecondary }]}>
                 {step === "totp" ? "Start over" : "Use a different email"}
               </Text>
+            </Pressable>
+          )}
+
+          {step === "email" && canPasskey && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Sign in with a passkey"
+              disabled={passkeyBusy}
+              onPress={onPasskey}
+              style={({ pressed }) => [
+                styles.socialBtn,
+                { borderColor: c.backgroundSelected, backgroundColor: c.backgroundElement, opacity: passkeyBusy ? 0.6 : pressed ? 0.8 : 1 },
+              ]}
+            >
+              {passkeyBusy ? (
+                <ActivityIndicator color={c.text} />
+              ) : (
+                <Text style={[styles.socialText, { color: c.text }]}>Sign in with a passkey</Text>
+              )}
             </Pressable>
           )}
 
