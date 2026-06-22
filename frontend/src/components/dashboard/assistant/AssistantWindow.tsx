@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
-import { Sparkles, X, ArrowUp, Square, SquarePen, History, PanelRight, PanelRightClose } from "lucide-react";
+import { Sparkles, X, ArrowUp, Square, SquarePen, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { clampToViewport, type Point, type Size } from "@/lib/window-bounds";
@@ -59,7 +59,6 @@ export function AssistantWindow({
   onDockWidthChange,
   conversation,
   onDraftChange,
-  onToggleDock,
   onClose,
   onSend,
   sending = false,
@@ -301,9 +300,6 @@ export function AssistantWindow({
             aria-label="Recent chats" title="Recent chats"
           >
             <History className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={onToggleDock} aria-label={docked ? "Undock" : "Dock to side"} title={docked ? "Undock" : "Dock to side"}>
-            {docked ? <PanelRightClose className="h-4 w-4" /> : <PanelRight className="h-4 w-4" />}
           </Button>
           <Button variant="ghost" size="icon" className="h-9 w-9" onClick={onClose} aria-label={`Close ${ASSISTANT_NAME}`}>
             <X className="h-5 w-5" />

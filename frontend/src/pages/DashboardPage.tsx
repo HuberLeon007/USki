@@ -96,7 +96,7 @@ export default function DashboardPage() {
         .then((entries) => setSharedAccess(Object.fromEntries(entries.filter((e) => e[1]) as [string, DeckAccess][])))
         .catch(() => {});
       const stats = await Promise.all(
-        d.map(async (deck) => [deck.id, await reviewStats(deck.id).catch(() => null)] as const),
+        [...d, ...s].map(async (deck) => [deck.id, await reviewStats(deck.id).catch(() => null)] as const),
       );
       const sm: Record<string, ReviewStats> = {};
       const dm: Record<string, number> = {};
@@ -247,7 +247,14 @@ export default function DashboardPage() {
   }
 
   const dueTotal = useMemo(() => Object.values(dueMap).reduce((a, b) => a + b, 0), [dueMap]);
-  const dueDecks = useMemo(() => decks.filter((d) => (dueMap[d.id] ?? 0) > 0), [decks, dueMap]);
+  // Overview shows owned AND shared decks that have cards due (shared decks
+  // behave like normal decks; their per-user stats are merged into dueMap above).
+  const dueDecks = useMemo(
+    () => [...decks, ...shared].filter((d) => (dueMap[d.id] ?? 0) > 0),
+    [decks, shared, dueMap],
+  );
+  // Fast lookup so any deck view can badge a deck as "Shared with you".
+  const sharedIds = useMemo(() => new Set(shared.map((d) => d.id)), [shared]);
   const totals = useMemo(() => {
     let nw = 0, ln = 0, du = 0, dn = 0;
     for (const s of Object.values(statsMap)) { nw += s.new; ln += s.learning; du += s.due; dn += s.done; }
@@ -375,6 +382,7 @@ export default function DashboardPage() {
                       totals={totals}
                       dueDecks={dueDecks}
                       statsMap={statsMap}
+                      sharedIds={sharedIds}
                       onOpenDeck={(id) => navigate(`/decks/${id}`)}
                       onStudy={(id) => navigate(`/decks/${id}?study=1`)}
                       onBrowseDecks={() => setView("decks")}
@@ -425,6 +433,21 @@ export default function DashboardPage() {
                         empty={q ? "No decks match your search." : "No decks yet. Create your first one."}
                         onCreate={() => setNewDeckGroup(null)}
                       />
+
+                      {/* Shared-with-you decks appear here too (referenced, not
+                          copied) so they behave like normal decks in this list. */}
+                      {shared.filter((d) => matches(d.title)).length > 0 && (
+                        <DeckGrid
+                          title="Shared with you"
+                          icon={<Users className="h-4 w-4 text-muted-foreground" />}
+                          decks={shared.filter((d) => matches(d.title))}
+                          statsMap={statsMap}
+                          sharedIds={sharedIds}
+                          view={deckView}
+                          onOpen={(id) => navigate(`/decks/${id}`)}
+                          empty="No decks shared with you yet."
+                        />
+                      )}
                     </>
                   )}
 
@@ -510,12 +533,13 @@ export default function DashboardPage() {
 }
 
 function OverviewPanel({
-  dueTotal, totals, dueDecks, statsMap, onOpenDeck, onStudy, onBrowseDecks,
+  dueTotal, totals, dueDecks, statsMap, sharedIds, onOpenDeck, onStudy, onBrowseDecks,
 }: {
   dueTotal: number;
   totals: { new: number; learning: number; due: number; done: number };
   dueDecks: Deck[];
   statsMap: Record<string, ReviewStats>;
+  sharedIds?: Set<string>;
   onOpenDeck: (id: string) => void;
   onStudy: (id: string) => void;
   onBrowseDecks: () => void;
@@ -558,7 +582,10 @@ function OverviewPanel({
         <button onClick={() => onOpenDeck(d.id)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
           <DeckBadge icon={d.icon} color={d.color} />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold">{d.title}</p>
+            <p className="flex items-center gap-1.5">
+              <span className="truncate text-sm font-semibold">{d.title}</span>
+              {sharedIds?.has(d.id) && <SharedTag />}
+            </p>
             <StateCounts nw={s?.new ?? 0} ln={s?.learning ?? 0} du={s?.due ?? 0} className="mt-0.5" />
           </div>
         </button>
@@ -657,8 +684,17 @@ function OverviewPanel({
   );
 }
 
+/** Small "Shared" pill shown on shared-with-you decks across the views. */
+function SharedTag() {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+      <Users className="h-2.5 w-2.5" /> Shared
+    </span>
+  );
+}
+
 function DeckGrid({
-  title, decks, onOpen, empty, onCreate, icon, statsMap, view = "grid",
+  title, decks, onOpen, empty, onCreate, icon, statsMap, view = "grid", sharedIds,
 }: {
   title: string;
   decks: Deck[];
@@ -668,6 +704,7 @@ function DeckGrid({
   icon?: React.ReactNode;
   statsMap: Record<string, ReviewStats>;
   view?: "grid" | "list";
+  sharedIds?: Set<string>;
 }) {
   return (
     <section className="space-y-3">
@@ -698,7 +735,10 @@ function DeckGrid({
                 onClick={() => onOpen(d.id)}
                 className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-accent/50 sm:grid-cols-[minmax(0,1fr)_6rem_auto]"
               >
-                <span className="min-w-0 truncate text-sm font-medium">{d.title}</span>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="min-w-0 truncate text-sm font-medium">{d.title}</span>
+                  {sharedIds?.has(d.id) && <SharedTag />}
+                </span>
                 <span className="hidden text-center text-xs tabular-nums text-muted-foreground sm:block">{(s?.total ?? 0)} cards</span>
                 <StateCounts nw={s?.new ?? 0} ln={s?.learning ?? 0} du={s?.due ?? 0} className="justify-self-end" />
               </button>
@@ -718,7 +758,10 @@ function DeckGrid({
               >
                 <DeckBadge icon={d.icon} color={d.color} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold">{d.title}</p>
+                  <p className="flex items-center gap-1.5">
+                    <span className="truncate text-sm font-semibold">{d.title}</span>
+                    {sharedIds?.has(d.id) && <SharedTag />}
+                  </p>
                   {d.description
                     ? <p className="truncate text-xs text-muted-foreground">{d.description}</p>
                     : <span className="text-xs text-muted-foreground tabular-nums">{s?.total ?? 0} cards</span>}

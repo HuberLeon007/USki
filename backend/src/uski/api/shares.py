@@ -11,7 +11,6 @@ from uski.core.security import CurrentUser, get_current_user
 from uski.schemas.sharing import (
     AccessLogOut, InviteCreate, InviteOut, RedeemRequest, ShareGrant, ShareOut,
 )
-from uski.services.permissions import Permission, effective_permission, require_permission
 
 router = APIRouter(prefix="/api", tags=["sharing"])
 
@@ -25,11 +24,18 @@ class OutgoingShareOut(BaseModel):
     permission: str
 
 
-def _require_share(deck_repo, share_repo, deck_id, user_id):
+def _require_owner(deck_repo, deck_id, user_id):
+    """Sharing is an owner-only right: only the deck's creator may view, grant,
+    revoke or invite. It is never delegated through a share (not even 'share'
+    permission) - the owner alone controls who has access, same as delete."""
     deck = deck_repo.get(deck_id)
     if deck is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deck not found")
-    require_permission(effective_permission(user_id, deck, share_repo), Permission.SHARE)
+    if deck.owner_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the deck owner can manage sharing.",
+        )
     return deck
 
 
@@ -38,7 +44,7 @@ async def list_shares(
     deck_id: str, deck_repo: DeckRepoDep, share_repo: ShareRepoDep,
     user: CurrentUser = Depends(get_current_user),
 ):
-    _require_share(deck_repo, share_repo, deck_id, user.id)
+    _require_owner(deck_repo, deck_id, user.id)
     return share_repo.list_for_deck(deck_id)
 
 
@@ -78,7 +84,7 @@ async def grant_share(
     audit: AuditRepoDep, notify: NotificationRepoDep,
     user: CurrentUser = Depends(get_current_user),
 ):
-    deck = _require_share(deck_repo, share_repo, deck_id, user.id)
+    deck = _require_owner(deck_repo, deck_id, user.id)
     grantee = user_repo.find_by_handle(body.username, body.discriminator)
     if grantee is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -99,7 +105,7 @@ async def revoke_share(
     audit: AuditRepoDep, notify: NotificationRepoDep,
     user: CurrentUser = Depends(get_current_user),
 ):
-    _require_share(deck_repo, share_repo, deck_id, user.id)
+    _require_owner(deck_repo, deck_id, user.id)
     share_repo.revoke(deck_id, grantee_id)
     audit.record(deck_id, user.id, "revoke", {"grantee": grantee_id})
     notify.create(grantee_id, deck_id, "revoked", "Your access to a deck was revoked.")
@@ -111,7 +117,7 @@ async def create_invite(
     deck_repo: DeckRepoDep, share_repo: ShareRepoDep, invite_repo: InviteRepoDep,
     user: CurrentUser = Depends(get_current_user),
 ):
-    _require_share(deck_repo, share_repo, deck_id, user.id)
+    _require_owner(deck_repo, deck_id, user.id)
     return invite_repo.create(deck_id, body.permission, user.id)
 
 
@@ -148,5 +154,5 @@ async def access_log(
     deck_id: str, deck_repo: DeckRepoDep, share_repo: ShareRepoDep, audit: AuditRepoDep,
     user: CurrentUser = Depends(get_current_user),
 ):
-    _require_share(deck_repo, share_repo, deck_id, user.id)
+    _require_owner(deck_repo, deck_id, user.id)
     return audit.list_for_deck(deck_id)
