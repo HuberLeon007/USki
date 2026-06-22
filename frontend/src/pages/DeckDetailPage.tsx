@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Play, Share2, Plus, Pencil, Trash2, Loader2, GripVertical, Settings2, Image as ImageIcon, Check, ArrowLeftRight,
+  ArrowLeft, Play, Share2, Plus, Pencil, Trash2, Loader2, GripVertical, Settings2, Image as ImageIcon, Check, ArrowLeftRight, Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,7 +25,8 @@ import {
 import {
   ApiError,
   listCards, createCard, updateCard, deleteCard, deleteDeck, getDeck, updateDeck, listGroups, reorderCards,
-  setBidirectional, resetProgress, reviewStats, type Card, type Deck, type DeckGroup, type ReviewStats,
+  setBidirectional, resetProgress, reviewStats, deckPresence, deckPresenceLeave, getDeviceId,
+  type Card, type Deck, type DeckGroup, type ReviewStats,
 } from "@/lib/api";
 
 type Mode = "study" | "manage" | "review" | "custom" | "settings" | "editor";
@@ -63,6 +64,7 @@ export default function DeckDetailPage() {
   const [params, setParams] = useSearchParams();
   const { user } = useAuth();
   const uid = user?.id ?? "anon";
+  const deviceId = useMemo(() => getDeviceId(), []);
 
   const [deck, setDeck] = useState<Deck | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
@@ -85,6 +87,9 @@ export default function DeckDetailPage() {
   const [groupColor, setGroupColor] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
+  // Cards currently locked by another collaborator (card_id -> user_id). Refreshed
+  // on every presence heartbeat so the list can show a lock and refuse to open.
+  const [lockedCards, setLockedCards] = useState<Record<string, string>>({});
   // Stable id for the in-progress draft (per deck + card; "new" for a new card).
   const draftId = (cardId: string | null) => `card:${deckId}:${cardId ?? "new"}`;
 
@@ -130,9 +135,21 @@ export default function DeckDetailPage() {
       if (d) { setFront(d.front ?? ""); setBack(d.back ?? ""); setGroupLabel(d.groupLabel ?? ""); setGroupColor(d.groupColor ?? ""); setMakeReverse(Boolean(d.makeReverse)); }
     });
   }
-  function openEdit(c: Card) {
+  async function openEdit(c: Card) {
     // Always edit the note's primary (basic) card; the reverse mirrors it.
     const rep = c.note_id ? (cards.find((x) => x.note_id === c.note_id && x.card_type === "basic") ?? c) : c;
+    // Acquire the edit lock first. If another device holds it, refuse to open so
+    // two people never edit (and overwrite) the same card at once.
+    try {
+      const p = await deckPresence(deckId, deviceId, rep.id);
+      setLockedCards(p.locked_cards);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        toast.error("Someone else is editing this card right now.");
+        return;
+      }
+      // Other errors (offline etc.) shouldn't block local editing.
+    }
     const bidir = Boolean(rep.note_id) && cards.some((x) => x.note_id === rep.note_id && x.id !== rep.id);
     setEditingId(rep.id); setFront(rep.front_html); setBack(rep.back_html);
     setMakeReverse(bidir); setBidirInitial(bidir);
@@ -141,6 +158,11 @@ export default function DeckDetailPage() {
     loadDraft<DraftShape>(uid, draftId(rep.id)).then((d) => {
       if (d) { setFront(d.front ?? ""); setBack(d.back ?? ""); setGroupLabel(d.groupLabel ?? ""); setGroupColor(d.groupColor ?? ""); }
     });
+  }
+
+  /** Best-effort release of this device's edit lock (keeps presence in the deck). */
+  function releaseLock() {
+    deckPresence(deckId, deviceId, null).then((p) => setLockedCards(p.locked_cards)).catch(() => {});
   }
 
   async function save() {
@@ -165,6 +187,7 @@ export default function DeckDetailPage() {
       await clearDraft(uid, draftId(editingId));
       setSaveFailed(false);
       setMode("manage"); setEditingId(null); setFront(""); setBack("");
+      releaseLock();
       loadStats();
     } catch {
       // Backend/DB unreachable: keep the encrypted draft, stay in the editor.
@@ -186,7 +209,26 @@ export default function DeckDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, front, back, groupLabel, groupColor, makeReverse, editingId, uid, deckId]);
 
-  // Auto-retry the save once the connection comes back (draft was kept locally).
+  // Renew the edit lock + presence every 15s while the editor is open, so the
+  // lock doesn't expire (server TTL ~30s) and the deck owner sees us as present.
+  useEffect(() => {
+    if (mode !== "editor") return;
+    const tick = () => deckPresence(deckId, deviceId, editingId).then((p) => setLockedCards(p.locked_cards)).catch(() => {});
+    const iv = setInterval(tick, 15000);
+    return () => clearInterval(iv);
+  }, [mode, editingId, deckId, deviceId]);
+
+  // Snapshot who's editing what when opening the card list (a hint only; the
+  // authoritative check is the 409 on openEdit). Not a continuous poll.
+  useEffect(() => {
+    if (mode !== "manage") return;
+    deckPresence(deckId, deviceId, null).then((p) => setLockedCards(p.locked_cards)).catch(() => {});
+  }, [mode, deckId, deviceId]);
+
+  // Drop our presence/lock when leaving the deck page entirely.
+  useEffect(() => {
+    return () => { deckPresenceLeave(deckId, deviceId).catch(() => {}); };
+  }, [deckId, deviceId]);
   useEffect(() => {
     if (!saveFailed) return;
     const retry = () => { if (mode === "editor") { toast("Back online — saving your draft…"); void save(); } };
@@ -298,7 +340,7 @@ export default function DeckDetailPage() {
           front={front} back={back} onFront={setFront} onBack={setBack}
           showReverse={true} makeReverse={makeReverse} onMakeReverse={setMakeReverse}
           saving={saving} canSave={Boolean(front.trim())}
-          onCancel={() => { void clearDraft(uid, draftId(editingId)); setSaveFailed(false); setMode("manage"); setEditingId(null); }}
+          onCancel={() => { void clearDraft(uid, draftId(editingId)); setSaveFailed(false); setMode("manage"); setEditingId(null); releaseLock(); }}
           onSave={save}
         />
         <AssistantBubble deckId={deckId} />
@@ -460,6 +502,7 @@ export default function DeckDetailPage() {
                   {visibleGroups.map(({ rep, bidir, ids }) => {
                     const fL = firstLine(rep.front_html), bL = firstLine(rep.back_html);
                     const isSel = selected.has(rep.id);
+                    const locked = Boolean(lockedCards[rep.id]);
                     const isOver = dragOverId === rep.id && dragId !== null && dragId !== rep.id;
                     return (
                       <motion.div
@@ -522,6 +565,11 @@ export default function DeckDetailPage() {
                           </span>
                         </button>
                         <div className="flex shrink-0 gap-1 opacity-60 transition-opacity group-hover:opacity-100">
+                          {locked && (
+                            <span className="flex items-center text-amber-500" title="Someone else is editing this card">
+                              <Lock className="h-4 w-4" />
+                            </span>
+                          )}
                           <button onClick={() => openEdit(rep)} aria-label="Edit card" className="text-muted-foreground hover:text-foreground"><Pencil className="h-4 w-4" /></button>
                           <button onClick={() => removeNote(ids)} aria-label="Delete card" className="text-destructive"><Trash2 className="h-4 w-4" /></button>
                         </div>

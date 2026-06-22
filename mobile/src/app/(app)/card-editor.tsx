@@ -1,5 +1,5 @@
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -10,7 +10,10 @@ import {
   TextInput,
 } from "react-native";
 
-import { createCard, deleteCard, SessionExpiredError, updateCard } from "@/lib/api";
+import {
+  ApiError, createCard, deckPresence, deckPresenceLeave, deleteCard, getDeviceId,
+  SessionExpiredError, updateCard,
+} from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { textToHtml } from "@/lib/html";
 import { saveDraft, loadDraft, clearDraft } from "@/lib/draft-store";
@@ -34,6 +37,42 @@ export default function CardEditorScreen() {
 
   const uid = user?.id ?? "anon";
   const draftId = `card_${params.deckId}_${params.cardId ?? "new"}`;
+  const deviceIdRef = useRef<string | null>(null);
+
+  // Acquire the edit lock (when editing an existing card), keep it alive with a
+  // heartbeat, and release presence on leave. If another device already holds
+  // the lock, refuse to open and bounce back so two people can't edit at once.
+  useEffect(() => {
+    let alive = true;
+    let iv: ReturnType<typeof setInterval> | null = null;
+    const cardId = params.cardId ?? null;
+    (async () => {
+      const deviceId = await getDeviceId();
+      deviceIdRef.current = deviceId;
+      if (!alive) return;
+      try {
+        await deckPresence(params.deckId, deviceId, cardId);
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 409) {
+          Alert.alert("Card in use", "Someone else is editing this card right now.");
+          router.back();
+          return;
+        }
+        // offline / other errors shouldn't block local editing
+      }
+      if (!alive) return;
+      iv = setInterval(() => {
+        void deckPresence(params.deckId, deviceId, cardId).catch(() => {});
+      }, 15000);
+    })();
+    return () => {
+      alive = false;
+      if (iv) clearInterval(iv);
+      const did = deviceIdRef.current;
+      if (did) void deckPresenceLeave(params.deckId, did).catch(() => {});
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.deckId, params.cardId]);
 
   // Restore an unsaved draft (survives a crash / app kill mid-edit).
   useEffect(() => {

@@ -546,6 +546,48 @@ export const importDeck = (id: string) =>
 export const getDeckAccess = (id: string) =>
   apiFetch<DeckAccess>(`/decks/${id}/access`, {}, authed);
 
+// ── Live presence + edit locks (collaborative decks) ────────────────────
+const DEVICE_KEY = "uski.device_id";
+/** Stable per-browser device id used to scope presence/edit-locks. Persisted in
+ *  localStorage so a device keeps its identity across reloads. */
+export function getDeviceId(): string {
+  let id = localStorage.getItem(DEVICE_KEY);
+  if (!id) {
+    id = (crypto.randomUUID?.() ?? `dev-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+    localStorage.setItem(DEVICE_KEY, id);
+  }
+  return id;
+}
+
+export interface DeckPresence {
+  /** Other active users in the deck (user ids), excluding the caller. */
+  others: string[];
+  /** card_id -> user_id currently holding the edit lock (excludes this device). */
+  locked_cards: Record<string, string>;
+  owner_id: string;
+}
+
+/**
+ * Heartbeat presence in a deck and optionally hold an edit lock on `cardId`.
+ * Throws ApiError(409) when another device already holds that card's lock, so
+ * callers can refuse to open the editor. Returns who else is present plus the
+ * current lock map (no continuous polling needed).
+ */
+export const deckPresence = (deckId: string, deviceId: string, cardId: string | null) =>
+  apiFetch<DeckPresence>(
+    `/decks/${deckId}/presence`,
+    { method: "POST", body: JSON.stringify({ device_id: deviceId, card_id: cardId }) },
+    authed,
+  );
+
+/** Drop this device's presence/lock in a deck (best-effort on leaving an editor). */
+export const deckPresenceLeave = (deckId: string, deviceId: string) =>
+  apiFetch<void>(
+    `/decks/${deckId}/presence/leave`,
+    { method: "POST", body: JSON.stringify({ device_id: deviceId }) },
+    authed,
+  );
+
 // groups
 export const listGroups = () => apiFetch<DeckGroup[]>("/groups", {}, authed);
 export const createGroup = (data: { name: string; parent_group_id?: string | null }) =>

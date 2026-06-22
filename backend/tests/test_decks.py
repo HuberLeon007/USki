@@ -2,9 +2,10 @@
 
 import pytest
 
-from uski.core.deps import get_deck_repo, get_share_repo
+from uski.core.deps import get_deck_repo, get_presence_repo, get_share_repo
 from uski.main import app
 from uski.repos.decks import InMemoryDeckRepo
+from uski.repos.presence import InMemoryPresenceRepo
 from uski.repos.sharing import InMemoryShareRepo
 from uski.schemas.deck import DeckCreate
 
@@ -14,9 +15,11 @@ def repo():
     r = InMemoryDeckRepo()
     app.dependency_overrides[get_deck_repo] = lambda: r
     app.dependency_overrides[get_share_repo] = lambda: InMemoryShareRepo()
+    app.dependency_overrides[get_presence_repo] = lambda: InMemoryPresenceRepo()
     yield r
     app.dependency_overrides.pop(get_deck_repo, None)
     app.dependency_overrides.pop(get_share_repo, None)
+    app.dependency_overrides.pop(get_presence_repo, None)
 
 
 @pytest.fixture

@@ -347,6 +347,55 @@ export const updateCard = (deckId: string, cardId: string, patch: { front_html?:
 export const deleteCard = (deckId: string, cardId: string) =>
   apiFetch<void>(`/decks/${deckId}/cards/${cardId}`, { method: "DELETE" }, authed);
 
+// ── Live presence + edit locks (collaborative decks) ─────────────────────
+const DEVICE_KEY = "uski_device_id";
+let cachedDeviceId: string | null = null;
+
+function makeUuid(): string {
+  // RFC4122-ish v4; good enough as a stable device identifier.
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+/** Stable per-install device id (persisted in SecureStore) for presence/locks. */
+export async function getDeviceId(): Promise<string> {
+  if (cachedDeviceId) return cachedDeviceId;
+  try {
+    const saved = await readStored(DEVICE_KEY);
+    if (saved) { cachedDeviceId = saved; return saved; }
+  } catch { /* fall through to generate */ }
+  const id = makeUuid();
+  cachedDeviceId = id;
+  try { await writeStored(DEVICE_KEY, id); } catch { /* in-memory still works */ }
+  return id;
+}
+
+export interface DeckPresence {
+  others: string[];
+  locked_cards: Record<string, string>;
+  owner_id: string;
+}
+
+/** Heartbeat presence + optionally hold the edit lock on `cardId`. Throws
+ *  ApiError(409) when another device holds that card's lock. */
+export const deckPresence = (deckId: string, deviceId: string, cardId: string | null) =>
+  apiFetch<DeckPresence>(
+    `/decks/${deckId}/presence`,
+    { method: "POST", body: JSON.stringify({ device_id: deviceId, card_id: cardId }) },
+    authed,
+  );
+
+/** Drop this device's presence/lock in a deck. */
+export const deckPresenceLeave = (deckId: string, deviceId: string) =>
+  apiFetch<void>(
+    `/decks/${deckId}/presence/leave`,
+    { method: "POST", body: JSON.stringify({ device_id: deviceId }) },
+    authed,
+  );
+
 // ── Sharing ───────────────────────────────────────────────────────────────
 export interface Share {
   deck_id: string;
