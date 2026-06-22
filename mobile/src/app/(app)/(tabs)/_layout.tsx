@@ -1,5 +1,5 @@
 import { Tabs, useRouter } from "expo-router";
-import { Pressable } from "react-native";
+import { Pressable, StyleSheet } from "react-native";
 
 import { Icon } from "@/components/icon";
 import { PRIMARY, useColors } from "@/lib/ui";
@@ -44,6 +44,22 @@ export default function TabsLayout() {
         headerLeft: () => <BellButton />,
         headerRight: () => <SettingsButton />,
         sceneStyle: { backgroundColor: c.background },
+        // Themed header to match the web dark surface.
+        headerStyle: { backgroundColor: c.background },
+        headerShadowVisible: false,
+        headerTintColor: c.text,
+        headerTitleStyle: { fontWeight: "700" },
+        // Cleaner, branded tab bar (the default felt bare).
+        tabBarStyle: {
+          backgroundColor: c.background,
+          borderTopColor: c.backgroundSelected,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          height: 64,
+          paddingTop: 6,
+          paddingBottom: 10,
+        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
+        tabBarItemStyle: { paddingTop: 2 },
       }}
     >
       <Tabs.Screen

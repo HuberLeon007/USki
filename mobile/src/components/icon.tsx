@@ -18,6 +18,7 @@ import Share2 from "lucide-react-native/dist/esm/icons/share-2";
 import Sparkles from "lucide-react-native/dist/esm/icons/sparkles";
 import Trash2 from "lucide-react-native/dist/esm/icons/trash-2";
 import Users from "lucide-react-native/dist/esm/icons/users";
+import X from "lucide-react-native/dist/esm/icons/x";
 
 const ICONS = {
   home: House,
@@ -34,6 +35,7 @@ const ICONS = {
   share: Share2,
   leave: LogOut,
   send: ArrowUp,
+  x: X,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

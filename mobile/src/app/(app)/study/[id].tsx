@@ -13,6 +13,9 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { CardHtml } from "@/components/card-html";
+import { StudySero } from "@/components/study-sero";
+import { htmlToText } from "@/lib/html";
+import { Icon } from "@/components/icon";
 import { PRIMARY, STATE_COLORS, useColors } from "@/lib/ui";
 
 const GRADES: { rating: ReviewRating; label: string; color: string }[] = [
@@ -39,6 +42,7 @@ export default function StudyScreen() {
   const [intervals, setIntervals] = useState<IntervalPreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [reviewed, setReviewed] = useState(0);
+  const [seroOpen, setSeroOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -113,7 +117,23 @@ export default function StudyScreen() {
   const total = queue.length;
   return (
     <View style={[styles.flex, { backgroundColor: c.background }]}>
-      <Stack.Screen options={{ title: `${index + 1} / ${total}` }} />
+      <Stack.Screen
+        options={{
+          title: `${index + 1} / ${total}`,
+          headerRight: () => (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Ask Sero about this card"
+              hitSlop={12}
+              onPress={() => setSeroOpen(true)}
+              style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 4, opacity: pressed ? 0.6 : 1 })}
+            >
+              <Icon name="sparkles" size={20} color={PRIMARY} />
+              <Text style={{ color: PRIMARY, fontWeight: "700", fontSize: 15 }}>Sero</Text>
+            </Pressable>
+          ),
+        }}
+      />
 
       <View style={[styles.progress, { backgroundColor: c.backgroundSelected }]}>
         <View style={[styles.progressFill, { width: `${(index / total) * 100}%`, backgroundColor: PRIMARY }]} />
@@ -157,6 +177,14 @@ export default function StudyScreen() {
           </View>
         )}
       </View>
+
+      <StudySero
+        visible={seroOpen}
+        onClose={() => setSeroOpen(false)}
+        front={htmlToText(current.front_html)}
+        back={htmlToText(current.back_html)}
+        deckId={id ?? null}
+      />
     </View>
   );
 }
