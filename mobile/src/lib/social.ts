@@ -29,8 +29,9 @@ export async function signInWithProvider(provider: Provider): Promise<SocialResu
     return { ok: false, error: "Social sign-in isn't configured for this server." };
   }
 
-  // uski://auth-callback — must be in the Supabase Auth redirect allow-list.
-  const redirectTo = makeRedirectUri({ scheme: "uski", path: "auth-callback" });
+  // Auto-selects the right redirect: exp:// in Expo Go, uski:// in a standalone
+  // build. Add BOTH resulting URIs to the Supabase Auth redirect allow-list.
+  const redirectTo = makeRedirectUri({ path: "auth-callback" });
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
