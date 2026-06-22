@@ -61,6 +61,26 @@ class TwoFactorResponse(BaseModel):
     enabled: bool
 
 
+class TotpStatusResponse(BaseModel):
+    """Whether app-based TOTP is active, and whether a setup is mid-flight."""
+
+    enabled: bool
+    pending: bool = False
+
+
+class TotpSetupResponse(BaseModel):
+    """Secret + otpauth URI for rendering the enrollment QR code."""
+
+    secret: str
+    otpauth_uri: str
+
+
+class TotpCodeRequest(BaseModel):
+    """A 6-digit code from the authenticator app."""
+
+    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$", examples=["123456"])
+
+
 class SessionInfo(BaseModel):
     """One device/login session for the Security settings list."""
 

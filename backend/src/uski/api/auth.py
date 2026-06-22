@@ -37,6 +37,9 @@ from uski.schemas.auth import (
     SetUsernameRequest,
     TwoFactorRequest,
     TwoFactorResponse,
+    TotpStatusResponse,
+    TotpSetupResponse,
+    TotpCodeRequest,
     UserResponse,
     UsernameCheckResponse,
     VerifyOtpRequest,
@@ -49,6 +52,7 @@ from uski.services.auth_identity import (
 )
 from uski.services import passkeys as passkeys_svc
 from uski.services import device_link
+from uski.services import totp as totp_svc
 from uski.services.sessions import (
     device_from_user_agent,
     geolocate,
@@ -462,6 +466,92 @@ async def set_two_factor(
 
     logger.info(f"2FA email preference updated: {current_user.id} -> {body.enabled}")
     return TwoFactorResponse(enabled=bool(result.data[0].get("two_factor_email") or False))
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# App-based TOTP second factor (authenticator apps)
+# ──────────────────────────────────────────────────────────────────────────
+
+
+@router.get("/2fa/totp", response_model=TotpStatusResponse)
+async def get_totp_status(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> TotpStatusResponse:
+    """Whether TOTP is active, and whether an unconfirmed setup is pending."""
+    row = (
+        get_supabase_client()
+        .table("user")
+        .select("totp_enabled, totp_secret")
+        .eq("id", current_user.id)
+        .execute()
+    )
+    enabled = False
+    pending = False
+    if row.data:
+        enabled = bool(row.data[0].get("totp_enabled") or False)
+        pending = bool(row.data[0].get("totp_secret")) and not enabled
+    return TotpStatusResponse(enabled=enabled, pending=pending)
+
+
+@router.post("/2fa/totp/setup", response_model=TotpSetupResponse)
+async def setup_totp(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> TotpSetupResponse:
+    """Begin TOTP enrollment: mint a secret and return its provisioning URI.
+
+    The secret is stored but stays inactive until a code is verified, so an
+    abandoned setup never affects login.
+    """
+    svc = get_supabase_client()
+    existing = (
+        svc.table("user").select("totp_enabled").eq("id", current_user.id).execute()
+    )
+    if existing.data and bool(existing.data[0].get("totp_enabled")):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="TOTP is already enabled.")
+
+    secret = totp_svc.generate_secret()
+    svc.table("user").update({"totp_secret": secret, "totp_enabled": False}).eq(
+        "id", current_user.id
+    ).execute()
+    uri = totp_svc.provisioning_uri(secret, current_user.email)
+    return TotpSetupResponse(secret=secret, otpauth_uri=uri)
+
+
+@router.post("/2fa/totp/verify", response_model=TotpStatusResponse)
+async def verify_totp(
+    body: TotpCodeRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> TotpStatusResponse:
+    """Confirm enrollment by checking a code against the pending secret."""
+    svc = get_supabase_client()
+    row = svc.table("user").select("totp_secret").eq("id", current_user.id).execute()
+    secret = row.data[0].get("totp_secret") if row.data else None
+    if not secret:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Start TOTP setup first.")
+    if not totp_svc.verify_code(secret, body.code):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="That code didn't match. Try the current one.")
+    svc.table("user").update({"totp_enabled": True}).eq("id", current_user.id).execute()
+    logger.info(f"TOTP enabled for {current_user.id}")
+    return TotpStatusResponse(enabled=True, pending=False)
+
+
+@router.post("/2fa/totp/disable", response_model=TotpStatusResponse)
+async def disable_totp(
+    body: TotpCodeRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> TotpStatusResponse:
+    """Turn TOTP off. Requires a valid current code to prove possession."""
+    svc = get_supabase_client()
+    row = svc.table("user").select("totp_secret, totp_enabled").eq("id", current_user.id).execute()
+    if not row.data or not bool(row.data[0].get("totp_enabled")):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="TOTP is not enabled.")
+    if not totp_svc.verify_code(row.data[0].get("totp_secret"), body.code):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="That code didn't match. Try the current one.")
+    svc.table("user").update({"totp_secret": None, "totp_enabled": False}).eq(
+        "id", current_user.id
+    ).execute()
+    logger.info(f"TOTP disabled for {current_user.id}")
+    return TotpStatusResponse(enabled=False, pending=False)
 
 
 # ──────────────────────────────────────────────────────────────────────────
