@@ -25,6 +25,9 @@ interface GuidedTourProps {
   /** Called when the user completes the final step via its primary action. */
   onFinish?: () => void;
   finishLabel?: string;
+  /** Optional secondary action on the final step (e.g. "Create a deck"). */
+  onFinishSecondary?: () => void;
+  finishSecondaryLabel?: string;
 }
 
 interface Box { top: number; left: number; width: number; height: number; }
@@ -39,7 +42,7 @@ const PAD = 8;
  * and callbacks it is handed. Honors reduced motion (cursor and reveals become
  * instant). Rendered in a portal on document.body so it floats above all UI.
  */
-export function GuidedTour({ steps, onClose, onFinish, finishLabel = "Finish" }: GuidedTourProps) {
+export function GuidedTour({ steps, onClose, onFinish, finishLabel = "Finish", onFinishSecondary, finishSecondaryLabel }: GuidedTourProps) {
   const reduce = useReducedMotion();
   const [index, setIndex] = useState(0);
   const [box, setBox] = useState<Box | null>(null);
@@ -54,7 +57,10 @@ export function GuidedTour({ steps, onClose, onFinish, finishLabel = "Finish" }:
   const measure = useCallback(() => {
     if (!step?.target) { setBox(null); return; }
     const el = document.querySelector(step.target) as HTMLElement | null;
-    if (!el) { setBox(null); return; }
+    // Target not laid out yet (e.g. a view switch is still settling): keep the
+    // previous spotlight instead of flashing the full-screen dim. This is what
+    // made Next-then-Back feel glitchy.
+    if (!el) return;
     const r = el.getBoundingClientRect();
     const pad = step.spotlightPadding ?? PAD;
     setBox({ top: r.top - pad, left: r.left - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
@@ -127,13 +133,24 @@ export function GuidedTour({ steps, onClose, onFinish, finishLabel = "Finish" }:
         )}
       </AnimatePresence>
 
+      {/* Pulsing ring around the spotlight to draw the eye to the target. */}
+      {box && !reduce && (
+        <motion.div
+          className="pointer-events-none absolute z-[205] rounded-2xl border-2 border-primary"
+          style={{ top: box.top, left: box.left, width: box.width, height: box.height }}
+          animate={{ boxShadow: ["0 0 0 0 hsl(263 70% 65% / 0.55)", "0 0 0 12px hsl(263 70% 65% / 0)"] }}
+          transition={{ duration: 1.5, repeat: Infinity, ease: "easeOut" }}
+        />
+      )}
+
       {/* Click-catcher so the rest of the app isn't interactable mid-tour. */}
       <div className="absolute inset-0" onClick={(e) => e.stopPropagation()} />
 
-      {/* Animated hand cursor gliding to the target. */}
+      {/* Animated hand cursor gliding to the target. White with a dark shadow so
+          it stays visible on both the dark dim and the purple primary buttons. */}
       {!reduce && (
         <motion.div
-          className="pointer-events-none absolute z-[210] text-primary drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)]"
+          className="pointer-events-none absolute z-[210] text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]"
           initial={false}
           animate={{ x: cursorTarget.x, y: cursorTarget.y }}
           transition={{ type: "spring", stiffness: 120, damping: 18 }}
@@ -142,7 +159,7 @@ export function GuidedTour({ steps, onClose, onFinish, finishLabel = "Finish" }:
             animate={{ scale: [1, 0.82, 1] }}
             transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
           >
-            <MousePointer2 className="h-7 w-7 -translate-x-1 -translate-y-1 fill-primary/30" />
+            <MousePointer2 className="h-7 w-7 -translate-x-1 -translate-y-1 fill-white" strokeWidth={1.75} />
           </motion.div>
         </motion.div>
       )}
@@ -200,10 +217,20 @@ export function GuidedTour({ steps, onClose, onFinish, finishLabel = "Finish" }:
           >
             Skip
           </button>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {index > 0 && (
               <Button variant="outline" size="sm" className="h-9 gap-1.5 rounded-lg" onClick={back}>
                 <ArrowLeft className="h-4 w-4" /> Back
+              </Button>
+            )}
+            {isLast && onFinishSecondary && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 rounded-lg"
+                onClick={onFinishSecondary}
+              >
+                {finishSecondaryLabel}
               </Button>
             )}
             <Button size="sm" className="h-9 gap-1.5 rounded-lg font-semibold" onClick={next}>

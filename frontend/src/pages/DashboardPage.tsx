@@ -205,7 +205,7 @@ export default function DashboardPage() {
     },
     {
       title: "You're all set",
-      body: "That's the tour. Create your first deck and start learning.",
+      body: "That's the tour. Create a deck whenever you're ready, or just ask Sero to explain anything.",
       target: null,
     },
   ];
@@ -457,7 +457,14 @@ export default function DashboardPage() {
 
       <AssistantBubble dueContext={dueContext} onReservedWidthChange={setAssistantReserved} allowGreeting={tourDone} />
       {tourOpen && (
-        <GuidedTour steps={tourSteps} onClose={endTour} onFinish={finishTour} finishLabel="Create a deck" />
+        <GuidedTour
+          steps={tourSteps}
+          onClose={endTour}
+          onFinish={endTour}
+          finishLabel="Done"
+          onFinishSecondary={finishTour}
+          finishSecondaryLabel="Create a deck"
+        />
       )}
       <OnboardingStep open={showUsernameDialog} onOpenChange={setShowUsernameDialog} />
       <NewDeckDialog
