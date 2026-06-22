@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from loguru import logger
 
-from uski.core.deps import ChunkRepoDep, DeckRepoDep, EmbedderDep
+from uski.core.deps import ChunkRepoDep, DeckRepoDep, EmbedderDep, ShareRepoDep
 from uski.core.security import CurrentUser, get_current_user
 from uski.schemas.chat import ChatMessage, ChatRequest, ChatResponse
 from uski.services.ai_chat import chat as ai_chat
@@ -24,6 +24,7 @@ def send_message(
     deck_repo: DeckRepoDep,
     chunk_repo: ChunkRepoDep,
     embedder: EmbedderDep,
+    share_repo: ShareRepoDep,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> ChatResponse:
     # NOTE: sync `def` on purpose — the model call is blocking, so FastAPI runs
@@ -36,7 +37,8 @@ def send_message(
         if deck is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deck not found")
         require_permission(
-            resolve_permission(current_user.id, deck.owner_id, shares=[]), Permission.READ
+            resolve_permission(current_user.id, deck.owner_id, shares=share_repo.list_for_deck(request.deck_id)),
+            Permission.READ,
         )
         question = next((m.content for m in reversed(request.messages) if m.role == "user"), "")
         contexts = rag.retrieve_context(
@@ -76,6 +78,7 @@ async def stream_message(
     deck_repo: DeckRepoDep,
     chunk_repo: ChunkRepoDep,
     embedder: EmbedderDep,
+    share_repo: ShareRepoDep,
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Stream the reply as Server-Sent Events so the client renders it live.
@@ -93,7 +96,8 @@ async def stream_message(
         if deck is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deck not found")
         require_permission(
-            resolve_permission(current_user.id, deck.owner_id, shares=[]), Permission.READ
+            resolve_permission(current_user.id, deck.owner_id, shares=share_repo.list_for_deck(request.deck_id)),
+            Permission.READ,
         )
 
     def sse(obj: dict) -> str:
