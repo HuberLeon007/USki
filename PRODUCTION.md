@@ -130,6 +130,32 @@ git pull
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
+## Social login (Google / GitHub / Discord) — web + mobile
+
+Real OAuth is configured in the provider consoles + Supabase, not in code. Steps:
+1. Create an OAuth app in each provider you want:
+   - **Google**: Google Cloud Console → Credentials → OAuth client (Web). 
+   - **GitHub**: Settings → Developer settings → OAuth Apps.
+   - **Discord**: Developer Portal → New Application → OAuth2.
+   For each, set the **Authorization callback** to `https://YOUR-REF.supabase.co/auth/v1/callback`.
+2. Supabase → Auth → Providers: enable each, paste client id + secret.
+3. Supabase → Auth → URL Configuration → **Redirect allow-list**: add both
+   - `https://huberleon.com/auth/callback` (web)
+   - `uski://auth-callback` (mobile app)
+4. **Mobile build**: set `EXPO_PUBLIC_SUPABASE_URL` + `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+   in `mobile/.env` to the same cloud project. The login screen then shows the
+   social buttons (hidden when unset). The app scheme is `uski` (app.json).
+
+It's all free (Google/GitHub/Discord OAuth + Supabase free tier).
+
+## Passkeys
+
+- **Web**: works in prod (set `WEBAUTHN_RP_ID=huberleon.com` + `WEBAUTHN_ORIGINS`).
+- **Mobile**: NOT available in Expo Go — native passkeys need a custom dev-client
+  / standalone build plus platform domain association (iOS Associated Domains,
+  Android Digital Asset Links pointing at huberleon.com). Deferred; mobile users
+  sign in with email OTP or the social buttons. Add later on the EAS-build path.
+
 ## Caveats / honest notes
 - **Uptime = school server uptime.** If it's powered off (night/holidays) or the
   school network blocks outbound, the site is down. For true 24/7 you'd need an
