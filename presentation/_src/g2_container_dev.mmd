@@ -1,0 +1,28 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Segoe UI, system-ui, sans-serif","primaryColor":"#1b2433","primaryTextColor":"#e6edf6","primaryBorderColor":"#4f9cff","lineColor":"#8094ad","textColor":"#e6edf6","clusterBkg":"#0f1622","clusterBorder":"#324259","edgeLabelBackground":"#0f1622","titleColor":"#e6edf6"}}}%%
+flowchart LR
+  U([user<br/>Browser]):::user
+  subgraph APP["Docker Compose — App-Container"]
+    direction TB
+    FE["Frontend"]:::app
+    BE["backend<br/>FastAPI"]:::app
+  end
+  subgraph LOCAL["Lokale Dienste — profile dev"]
+    direction TB
+    SUP[("Supabase CLI<br/>Postgres + pgvector<br/>Auth · Storage")]:::data
+    OLL["Ollama<br/>Chat + Embeddings (lokal)"]:::ai
+    RED[("Redis<br/>Rate-Limiting")]:::cache
+    MAIL["Inbucket<br/>OTP-Mail-Catcher"]:::mail
+  end
+  U -->|HTTPS| FE
+  FE -->|"REST /api + Bearer JWT"| BE
+  FE -.->|"OTP-Login (anon key)"| SUP
+  BE -->|"JWT-Check via JWKS"| SUP
+  BE -->|"RAG / Chat (OpenAI-API)"| OLL
+  BE -->|"OTP-Limits"| RED
+  SUP -->|"6-stelliger Code"| MAIL
+  classDef user fill:#15263f,stroke:#4f9cff,color:#e6edf6;
+  classDef app fill:#1b2433,stroke:#4f9cff,color:#e6edf6;
+  classDef data fill:#15233a,stroke:#2dd4a7,color:#e6edf6;
+  classDef ai fill:#241a33,stroke:#a07cff,color:#e6edf6;
+  classDef cache fill:#2a1414,stroke:#ff6b6b,color:#e6edf6;
+  classDef mail fill:#2a2410,stroke:#f0a93b,color:#e6edf6;

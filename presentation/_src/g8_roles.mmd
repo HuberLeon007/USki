@@ -1,0 +1,25 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Segoe UI, system-ui, sans-serif","primaryColor":"#1b2433","primaryTextColor":"#e6edf6","primaryBorderColor":"#4f9cff","lineColor":"#8094ad","textColor":"#e6edf6","clusterBkg":"#0f1622","clusterBorder":"#324259","edgeLabelBackground":"#0f1622","titleColor":"#e6edf6"}}}%%
+flowchart TB
+  subgraph TOP["Zugriff vergeben"]
+    direction LR
+    O([Besitzer<br/>volle Rechte]):::owner
+    DS["Direkt teilen<br/>per Benutzername"]:::way
+    INV["Einladungs-Code<br/>einlösen"]:::way
+    G([Eingeladener user]):::user
+    O --> DS --> G
+    O --> INV --> G
+  end
+  subgraph ROLES["Rollen — wer darf was?"]
+    direction LR
+    R1["Lesen<br/>ansehen + lernen"]:::read
+    R2["Bearbeiten<br/>+ Karten ändern"]:::edit
+    R3["Teilen<br/>+ weiter teilen / verwalten"]:::share
+    R1 --> R2 --> R3
+  end
+  G -->|"erhält eine Rolle"| ROLES
+  classDef owner fill:#2a2410,stroke:#f0a93b,color:#e6edf6;
+  classDef user fill:#15263f,stroke:#4f9cff,color:#e6edf6;
+  classDef way fill:#1b2433,stroke:#4f9cff,color:#e6edf6;
+  classDef read fill:#15233a,stroke:#2dd4a7,color:#e6edf6;
+  classDef edit fill:#1c2b1a,stroke:#7bd154,color:#e6edf6;
+  classDef share fill:#241a33,stroke:#a07cff,color:#e6edf6;

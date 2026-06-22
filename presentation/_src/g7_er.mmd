@@ -1,0 +1,46 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Segoe UI, system-ui, sans-serif","primaryColor":"#1b2433","primaryTextColor":"#e6edf6","primaryBorderColor":"#4f9cff","lineColor":"#8094ad","textColor":"#e6edf6"}}}%%
+erDiagram
+  USER ||--o{ DECK : "besitzt"
+  DECK ||--o{ CARD : "enthält"
+  CARD ||--o{ DOC_CHUNK : "Embedding"
+  USER ||--o{ CARD_SCHEDULE : "lernt"
+  CARD ||--o{ CARD_SCHEDULE : "Fortschritt"
+  DECK ||--o{ DECK_SHARE : "geteilt als"
+  USER ||--o{ DECK_SHARE : "Empfänger"
+  USER ||--o{ USER_SESSION : "Geräte"
+  USER {
+    uuid id PK
+    text username
+    text discriminator
+  }
+  DECK {
+    uuid id PK
+    uuid owner_id FK
+    text title
+  }
+  CARD {
+    uuid id PK
+    uuid deck_id FK
+    jsonb content
+  }
+  DOC_CHUNK {
+    uuid id PK
+    vector embedding
+    text content
+  }
+  CARD_SCHEDULE {
+    uuid card_id FK
+    uuid user_id FK
+    jsonb fsrs
+    timestamptz due_at
+  }
+  DECK_SHARE {
+    uuid deck_id FK
+    uuid grantee_id FK
+    text permission
+  }
+  USER_SESSION {
+    uuid id PK
+    uuid user_id FK
+    text device_name
+  }

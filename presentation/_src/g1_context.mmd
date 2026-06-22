@@ -1,0 +1,25 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Segoe UI, system-ui, sans-serif","primaryColor":"#1b2433","primaryTextColor":"#e6edf6","primaryBorderColor":"#4f9cff","lineColor":"#8094ad","textColor":"#e6edf6","clusterBkg":"#0f1622","clusterBorder":"#324259","edgeLabelBackground":"#0f1622","titleColor":"#e6edf6"}}}%%
+flowchart LR
+  U([user]):::user
+  subgraph SYS["USki — System"]
+    direction TB
+    FE["Frontend"]:::app
+    BE["API<br/>FastAPI"]:::app
+    FE --- BE
+  end
+  subgraph EXT["Externe / Backend-Dienste"]
+    direction TB
+    SUP[("Supabase<br/>DB · Auth · Storage")]:::data
+    AI["KI-Modelle<br/>Chat + Embeddings"]:::ai
+    MAIL["E-Mail-Versand<br/>OTP-Codes"]:::mail
+  end
+  U -->|"lernt, chattet, teilt"| FE
+  BE -->|"Daten + Auth (JWT)"| SUP
+  BE -->|"RAG / Antworten"| AI
+  SUP -->|"Login-Code"| MAIL
+  MAIL -.->|"Code"| U
+  classDef user fill:#15263f,stroke:#4f9cff,color:#e6edf6;
+  classDef app fill:#1b2433,stroke:#4f9cff,color:#e6edf6;
+  classDef data fill:#15233a,stroke:#2dd4a7,color:#e6edf6;
+  classDef ai fill:#241a33,stroke:#a07cff,color:#e6edf6;
+  classDef mail fill:#2a2410,stroke:#f0a93b,color:#e6edf6;

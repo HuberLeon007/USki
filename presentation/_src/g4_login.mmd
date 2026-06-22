@@ -1,0 +1,19 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Segoe UI, system-ui, sans-serif","primaryColor":"#1b2433","primaryTextColor":"#e6edf6","primaryBorderColor":"#4f9cff","lineColor":"#8094ad","textColor":"#e6edf6","actorBkg":"#1b2433","actorBorder":"#4f9cff","actorTextColor":"#e6edf6","actorLineColor":"#5f7491","signalColor":"#cdd9e8","signalTextColor":"#cdd9e8","labelBoxBkgColor":"#15263f","labelBoxBorderColor":"#324259","labelTextColor":"#e6edf6","loopTextColor":"#e6edf6","noteBkgColor":"#2a2410","noteTextColor":"#f0e2bf","noteBorderColor":"#f0a93b"}}}%%
+sequenceDiagram
+  actor U as user
+  participant FE as Frontend
+  participant SB as Supabase Auth
+  participant M as Resend (E-Mail)
+  participant BE as Backend
+  U->>FE: E-Mail eingeben
+  FE->>SB: signInWithOtp(email)
+  SB->>M: 6-stelligen Code senden
+  M-->>U: E-Mail mit Code
+  U->>FE: Code eingeben
+  FE->>SB: verifyOtp(code)
+  SB-->>FE: Access- + Refresh-Token (JWT, RS256)
+  FE->>FE: speichert im localStorage
+  FE->>BE: GET /api/decks  +  Bearer JWT
+  BE->>SB: JWKS holen
+  BE->>BE: JWT prüfen
+  BE-->>FE: 200 OK + Daten

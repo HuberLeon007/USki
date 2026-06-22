@@ -1,0 +1,18 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Segoe UI, system-ui, sans-serif","primaryColor":"#1b2433","primaryTextColor":"#e6edf6","primaryBorderColor":"#4f9cff","lineColor":"#8094ad","textColor":"#e6edf6","actorBkg":"#1b2433","actorBorder":"#4f9cff","actorTextColor":"#e6edf6","actorLineColor":"#5f7491","signalColor":"#cdd9e8","signalTextColor":"#cdd9e8","labelBoxBkgColor":"#15263f","labelBoxBorderColor":"#324259","labelTextColor":"#e6edf6","loopTextColor":"#e6edf6","noteBkgColor":"#2a2410","noteTextColor":"#f0e2bf","noteBorderColor":"#f0a93b"}}}%%
+sequenceDiagram
+  actor U as user
+  participant FE as Frontend
+  participant BE as Backend
+  participant FS as FSRS-Engine
+  participant DB as Supabase (Schedule)
+  FE->>BE: GET /review/due  +  Bearer JWT
+  BE->>DB: Schedule-Map laden
+  DB-->>BE: FSRS-State je Karte
+  BE->>BE: fällige Karten (due_at <= jetzt)
+  BE-->>FE: fällige Karten
+  U->>FE: bewerten: again / hard / good / easy
+  FE->>BE: POST /review/{cardId} {rating}
+  BE->>FS: review(state, rating, now)
+  FS-->>BE: neuer State + nächstes Intervall
+  BE->>DB: upsert(schedule, due_at)
+  BE-->>FE: nächste Fälligkeit
