@@ -1,5 +1,5 @@
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -13,6 +13,7 @@ import {
 import { createCard, deleteCard, SessionExpiredError, updateCard } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { textToHtml } from "@/lib/html";
+import { saveDraft, loadDraft, clearDraft } from "@/lib/draft-store";
 import { PRIMARY, STATE_COLORS, useColors } from "@/lib/ui";
 
 /**
@@ -22,7 +23,7 @@ import { PRIMARY, STATE_COLORS, useColors } from "@/lib/ui";
 export default function CardEditorScreen() {
   const c = useColors();
   const router = useRouter();
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const params = useLocalSearchParams<{ deckId: string; cardId?: string; front?: string; back?: string }>();
   const editing = !!params.cardId;
 
@@ -30,6 +31,33 @@ export default function CardEditorScreen() {
   const [back, setBack] = useState(params.back ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const uid = user?.id ?? "anon";
+  const draftId = `card_${params.deckId}_${params.cardId ?? "new"}`;
+
+  // Restore an unsaved draft (survives a crash / app kill mid-edit).
+  useEffect(() => {
+    let alive = true;
+    loadDraft<{ front?: string; back?: string }>(uid, draftId).then((d) => {
+      if (!alive || !d) return;
+      if (d.front != null) setFront(d.front);
+      if (d.back != null) setBack(d.back);
+    });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid, draftId]);
+
+  // Debounced encrypted autosave while editing.
+  useEffect(() => {
+    if (!front.trim() && !back.trim()) return;
+    const t = setTimeout(() => { void saveDraft(uid, draftId, { front, back }); }, 600);
+    return () => clearTimeout(t);
+  }, [front, back, uid, draftId]);
+
+  const finishAndClear = useCallback(() => {
+    void clearDraft(uid, draftId);
+    router.back();
+  }, [uid, draftId, router]);
 
   async function save() {
     if (!front.trim()) {
@@ -42,7 +70,7 @@ export default function CardEditorScreen() {
     try {
       if (editing) await updateCard(params.deckId, params.cardId!, payload);
       else await createCard(params.deckId, payload);
-      router.back();
+      finishAndClear();
     } catch (err) {
       if (err instanceof SessionExpiredError) await signOut();
       else setError("Could not save the card. Try again.");
@@ -59,7 +87,7 @@ export default function CardEditorScreen() {
         onPress: async () => {
           try {
             await deleteCard(params.deckId, params.cardId!);
-            router.back();
+            finishAndClear();
           } catch (err) {
             if (err instanceof SessionExpiredError) await signOut();
             else setError("Could not delete the card.");
