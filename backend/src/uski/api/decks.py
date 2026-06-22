@@ -4,14 +4,20 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from loguru import logger
 from pydantic import BaseModel
 
-from uski.core.deps import CardRepoDep, DeckRepoDep, ShareRepoDep, UserRepoDep
+from uski.core.deps import CardRepoDep, DeckRepoDep, PresenceRepoDep, ShareRepoDep, UserRepoDep
 from uski.core.security import CurrentUser, get_current_user
 from uski.schemas.deck import DeckCreate, DeckOut, DeckUpdate
 from uski.services.permissions import (
     Permission, effective_permission, require_permission, resolve_permission,
 )
+from uski.services.presence import card_lock_holder
 
 router = APIRouter(prefix="/api/decks", tags=["decks"])
+
+
+class PresenceBody(BaseModel):
+    device_id: str
+    card_id: str | None = None
 
 # Card fields copied verbatim when importing/cloning a deck.
 _CARD_COPY_FIELDS = ("front_json", "front_html", "back_json", "back_html", "position", "card_type")
@@ -160,7 +166,68 @@ async def delete_deck(
     deck_id: str,
     repo: DeckRepoDep,
     share_repo: ShareRepoDep,
+    presence_repo: PresenceRepoDep,
     user: CurrentUser = Depends(get_current_user),
 ):
-    _load(repo, share_repo, deck_id, user.id, Permission.SHARE)
+    # Delete is an owner-only right — it is never granted through a share, not
+    # even with "share" permission.
+    deck = repo.get(deck_id)
+    if deck is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deck not found")
+    if deck.owner_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the deck owner can delete this deck.",
+        )
+    # Don't delete out from under collaborators who are still working in it.
+    others = [p for p in presence_repo.list_active(deck_id) if p.get("user_id") != user.id]
+    if others:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="People are still in this deck. Try again once everyone has left.",
+        )
     repo.delete(deck_id)
+
+
+@router.post("/{deck_id}/presence")
+async def deck_presence(
+    deck_id: str,
+    body: PresenceBody,
+    repo: DeckRepoDep,
+    share_repo: ShareRepoDep,
+    presence_repo: PresenceRepoDep,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Heartbeat presence in a deck (every ~15s) and optionally hold an edit lock
+    on `card_id`. Returns who else is active and which cards they're editing, so
+    the client never has to poll continuously. Anyone with read access counts as
+    present; only the same card held by another active device is a conflict."""
+    deck = _load(repo, share_repo, deck_id, user.id, Permission.READ)
+    active = presence_repo.list_active(deck_id)
+    if body.card_id:
+        holder = card_lock_holder(active, body.card_id, user.id, body.device_id)
+        if holder is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Someone else is editing this card right now.",
+            )
+    presence_repo.heartbeat(deck_id, user.id, body.device_id, body.card_id)
+    active = presence_repo.list_active(deck_id)
+    locks = {
+        p["card_id"]: p["user_id"]
+        for p in active
+        if p.get("card_id") and not (p["user_id"] == user.id and p["device_id"] == body.device_id)
+    }
+    others = sorted({p["user_id"] for p in active if p["user_id"] != user.id})
+    return {"others": others, "locked_cards": locks, "owner_id": deck.owner_id}
+
+
+@router.post("/{deck_id}/presence/leave", status_code=status.HTTP_204_NO_CONTENT)
+async def deck_presence_leave(
+    deck_id: str,
+    body: PresenceBody,
+    presence_repo: PresenceRepoDep,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Drop this device's presence (on leaving the deck or closing an editor)."""
+    presence_repo.leave(deck_id, user.id, body.device_id)

@@ -14,6 +14,7 @@ from uski.repos.images import ImageRepo, SupabaseImageRepo
 from uski.repos.groups import GroupRepo, SupabaseGroupRepo
 from uski.repos.schedules import ScheduleRepo, SupabaseScheduleRepo
 from uski.repos.chunks import ChunkRepo, SupabaseChunkRepo
+from uski.repos.presence import PresenceRepo, SupabasePresenceRepo
 from uski.services.embeddings import Embedder, OllamaEmbedder
 from uski.repos.sharing import (
     AuditRepo, InviteRepo, NotificationRepo, ShareRepo, UserRepo,
@@ -70,6 +71,10 @@ def get_user_repo() -> UserRepo:
     return SupabaseUserRepo()
 
 
+def get_presence_repo() -> PresenceRepo:
+    return SupabasePresenceRepo()
+
+
 DeckRepoDep = Annotated[DeckRepo, Depends(get_deck_repo)]
 CardRepoDep = Annotated[CardRepo, Depends(get_card_repo)]
 ImageRepoDep = Annotated[ImageRepo, Depends(get_image_repo)]
@@ -82,3 +87,4 @@ InviteRepoDep = Annotated[InviteRepo, Depends(get_invite_repo)]
 AuditRepoDep = Annotated[AuditRepo, Depends(get_audit_repo)]
 NotificationRepoDep = Annotated[NotificationRepo, Depends(get_notification_repo)]
 UserRepoDep = Annotated[UserRepo, Depends(get_user_repo)]
+PresenceRepoDep = Annotated[PresenceRepo, Depends(get_presence_repo)]
