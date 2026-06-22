@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { useTheme } from "next-themes";
 import { Moon, Sun, ArrowLeft, KeyRound } from "lucide-react";
-import { sendOtp, verifyOtp, getMe, tokenStorage, loginWithPasskey, ApiError } from "@/lib/api";
+import { sendOtp, verifyOtp, getMe, tokenStorage, loginWithPasskey, verifyTwoFactorChallenge, ApiError } from "@/lib/api";
 import { useAuth } from "@/app/auth-context";
 import { Button } from "@/components/ui/button";
 import { EmailStep } from "@/components/auth/EmailStep";
@@ -42,6 +42,8 @@ export default function LoginPage() {
   const [twofaStatus, setTwofaStatus] = useState<OtpStatus>("idle");
   const [twofaErrorKind, setTwofaErrorKind] = useState<OtpErrorKind>(null);
   const [twofaPending, setTwofaPending] = useState<Awaited<ReturnType<typeof verifyOtp>> | null>(null);
+  // The parked TOTP challenge id when a first factor returns two_factor_required.
+  const [totpChallenge, setTotpChallenge] = useState<string | null>(null);
 
   // Social login: which provider button is mid-flight, and the English error to
   // show after a failure (cancellation shows nothing). The OTP email step stays
@@ -79,6 +81,18 @@ export default function LoginPage() {
     setOtpStatus("verifying");
     try {
       const result = await verifyOtp(email, code);
+      // TOTP-protected account: jump to the authenticator-code step instead of
+      // completing. No tokens were issued yet, so we stay signed out until it passes.
+      if (result.two_factor_required && result.challenge) {
+        setTotpChallenge(result.challenge);
+        setTwofaEmail(result.email ?? email);
+        setTwofaStatus("idle");
+        setTwofaErrorKind(null);
+        setError(null);
+        setOtpStatus("idle");
+        setStep("twofa");
+        return;
+      }
       // Hold the tokens — do NOT authenticate yet. Authenticating now would flip
       // the app to a signed-in state and redirect instantly, skipping the success
       // animation. We persist the session only in onSuccessComplete (R7.4/R7.5).
@@ -134,19 +148,20 @@ export default function LoginPage() {
     }
   }
 
-  // Second-factor OTP entry (social + 2FA). Reuses the OTP phase machine.
+  // Second-factor entry (TOTP authenticator code). Exchanges the parked
+  // challenge for the real session. Reuses the OTP phase machine for the UI.
   async function handleTwofaSubmit(code: string) {
     setError(null);
     setTwofaErrorKind(null);
     setTwofaStatus("verifying");
     try {
-      const result = await verifyOtp(twofaEmail, code);
+      const result = await verifyTwoFactorChallenge(totpChallenge ?? "", code);
       setTwofaPending(result);
       setTwofaStatus("verified");
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setTwofaErrorKind("invalid");
-        setError("Wrong code. Please try again.");
+        setError("Wrong code. Enter the current one from your authenticator app.");
       } else {
         setTwofaErrorKind("network");
         setError("Verification failed. Please try again.");
@@ -199,32 +214,14 @@ export default function LoginPage() {
       const outcome = await broker.startSocialLogin(provider);
       if (outcome.kind === "session") {
         const s = outcome.session;
-        // Read the account's 2FA preference + email. We must query /me, which
-        // needs a token, so the first-factor tokens are stored just long enough
-        // to read the profile, then cleared if a second factor is required.
-        tokenStorage.set(s.access_token, s.refresh_token);
-        let twoFa = false;
-        let email = s.email;
-        try {
-          const me = await getMe();
-          twoFa = me.two_factor_email === true;
-          email = me.email ?? s.email;
-        } catch {
-          /* treat an unreadable profile as no 2FA */
-        }
-        if (shouldEnforceEmailSecondFactor(getAppMode(), twoFa, email)) {
-          // Discard the first-factor session: stay signed out until the second
-          // email code passes (a refresh mid-flow must not bypass the gate).
-          tokenStorage.clear();
-          setTwofaEmail(email as string);
+        // TOTP-protected account: the social mint withheld tokens behind a
+        // challenge. Go to the authenticator-code step to finish.
+        if (s.two_factor_required && s.challenge) {
+          setTotpChallenge(s.challenge);
+          setTwofaEmail(s.email ?? "");
           setTwofaStatus("idle");
           setTwofaErrorKind(null);
           setError(null);
-          try {
-            await sendOtp(email as string);
-          } catch {
-            /* non-fatal: the user can use Resend on the next screen */
-          }
           setSocialLoading(null);
           setStep("twofa");
           return;
@@ -325,7 +322,7 @@ export default function LoginPage() {
                   {step === "email"
                     ? "We'll email you a one-time code. No password needed."
                     : step === "twofa"
-                      ? "Enter the code we emailed to finish signing in."
+                      ? "Enter the 6-digit code from your authenticator app."
                       : "Enter the 6-digit code we just sent you."}
                 </p>
               </motion.div>
@@ -346,7 +343,7 @@ export default function LoginPage() {
                 <OtpStep
                   email={twofaEmail}
                   onSubmit={handleTwofaSubmit}
-                  onResend={() => sendOtp(twofaEmail)}
+                  onResend={() => Promise.resolve()}
                   onBack={handleTwofaBack}
                   status={twofaStatus}
                   error={error}

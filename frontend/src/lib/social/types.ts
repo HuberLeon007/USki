@@ -30,6 +30,8 @@ export interface CanonicalSession {
   user_id: string;
   email: string | null;
   needs_username: boolean;
+  two_factor_required?: boolean;
+  challenge?: string | null;
 }
 
 /**
@@ -114,6 +116,8 @@ export type CanonicalSessionLike = {
   user_id: string;
   email: string | null;
   needs_username: boolean;
+  two_factor_required?: boolean;
+  challenge?: string | null;
 };
 
 /**
@@ -130,6 +134,8 @@ export function toCanonicalSession(input: CanonicalSessionLike): CanonicalSessio
     user_id: input.user_id,
     email: input.email,
     needs_username: input.needs_username,
+    two_factor_required: input.two_factor_required,
+    challenge: input.challenge,
   };
 }
 

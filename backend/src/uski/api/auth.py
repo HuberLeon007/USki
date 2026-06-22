@@ -40,6 +40,7 @@ from uski.schemas.auth import (
     TotpStatusResponse,
     TotpSetupResponse,
     TotpCodeRequest,
+    TwoFactorChallengeVerify,
     UserResponse,
     UsernameCheckResponse,
     VerifyOtpRequest,
@@ -53,6 +54,7 @@ from uski.services.auth_identity import (
 from uski.services import passkeys as passkeys_svc
 from uski.services import device_link
 from uski.services import totp as totp_svc
+from uski.services import two_factor_challenge as tfc_svc
 from uski.services.sessions import (
     device_from_user_agent,
     geolocate,
@@ -167,10 +169,39 @@ async def send_otp(body: SendOtpRequest, request: Request) -> MessageResponse:
     )
 
 
+def _two_factor_enabled(user_id: str) -> bool:
+    """True if the account has app-based TOTP active (the login second factor)."""
+    try:
+        row = get_supabase_client().table("user").select("totp_enabled").eq("id", user_id).execute()
+        return bool(row.data and row.data[0].get("totp_enabled"))
+    except Exception:  # noqa: BLE001 - a lookup failure must not hard-block login
+        return False
+
+
+def _gate_two_factor(resp: AuthResponse) -> AuthResponse:
+    """Withhold tokens behind a TOTP challenge when the account requires it.
+
+    Grace by design: accounts without TOTP enabled pass straight through, so
+    enabling enforcement never locks anyone out. Passkey and device-link logins
+    do not call this — a passkey is already a strong factor.
+    """
+    if not resp.user_id or not _two_factor_enabled(resp.user_id):
+        return resp
+    challenge = tfc_svc.create(
+        resp.user_id, resp.email, resp.access_token, resp.refresh_token, resp.needs_username
+    )
+    return AuthResponse(
+        email=resp.email,
+        needs_username=resp.needs_username,
+        two_factor_required=True,
+        challenge=challenge,
+    )
+
+
 @router.post("/verify-otp", response_model=AuthResponse)
 @limiter.limit(settings.RATE_LIMIT_VERIFY_OTP_IP)
 async def verify_otp(body: VerifyOtpRequest, request: Request, background: BackgroundTasks) -> AuthResponse:
-    """Verify the 6-digit OTP code and return session tokens."""
+    """Verify the 6-digit OTP code and return session tokens (or a 2FA challenge)."""
     client = get_supabase_anon_client()
 
     try:
@@ -218,12 +249,14 @@ async def verify_otp(body: VerifyOtpRequest, request: Request, background: Backg
     except Exception as exc:
         logger.warning(f"Failed to check username for {user.id}: {exc}")
 
-    return AuthResponse(
-        access_token=session.access_token,
-        refresh_token=session.refresh_token,
-        user_id=user.id,
-        email=body.email,
-        needs_username=needs_username,
+    return _gate_two_factor(
+        AuthResponse(
+            access_token=session.access_token,
+            refresh_token=session.refresh_token,
+            user_id=user.id,
+            email=body.email,
+            needs_username=needs_username,
+        )
     )
 
 
@@ -552,6 +585,44 @@ async def disable_totp(
     ).execute()
     logger.info(f"TOTP disabled for {current_user.id}")
     return TotpStatusResponse(enabled=False, pending=False)
+
+
+@router.post("/2fa/challenge/verify", response_model=AuthResponse)
+@limiter.limit(settings.RATE_LIMIT_VERIFY_OTP_IP)
+async def verify_two_factor_challenge(body: TwoFactorChallengeVerify, request: Request) -> AuthResponse:
+    """Finish a TOTP-gated login: check the code against the parked challenge.
+
+    On success the parked session is released (and the challenge consumed). A
+    wrong code leaves the challenge intact so the user can retry until it
+    expires.
+    """
+    row = tfc_svc.peek(body.challenge)
+    if not row or tfc_svc.is_expired(row.get("created_at")):
+        if row:
+            tfc_svc.delete(body.challenge)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This sign-in request expired. Start over.",
+        )
+
+    secret_row = (
+        get_supabase_client().table("user").select("totp_secret, totp_enabled").eq("id", row["user_id"]).execute()
+    )
+    secret = secret_row.data[0].get("totp_secret") if secret_row.data else None
+    if not totp_svc.verify_code(secret, body.code):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="That code didn't match. Enter the current one from your app.",
+        )
+
+    tfc_svc.delete(body.challenge)
+    return AuthResponse(
+        access_token=row["access_token"],
+        refresh_token=row["refresh_token"],
+        user_id=row["user_id"],
+        email=row.get("email"),
+        needs_username=bool(row.get("needs_username")),
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -886,6 +957,6 @@ if settings.is_dev:
         """
         resp = _mock_social_login(body)
         _capture_login(resp.user_id, resp.email, resp.refresh_token, request, background)
-        return resp
+        return _gate_two_factor(resp)
 
     logger.info("mock-social: dev-only endpoint POST /api/auth/dev/mock-social registered")

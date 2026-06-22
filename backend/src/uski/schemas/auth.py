@@ -26,13 +26,27 @@ class VerifyOtpRequest(BaseModel):
 
 
 class AuthResponse(BaseModel):
-    """Response after successful OTP verification."""
+    """Response after successful authentication.
 
-    access_token: str
-    refresh_token: str
-    user_id: str
+    When the account has TOTP enabled, the first factor returns
+    ``two_factor_required=True`` plus a ``challenge`` id and withholds the
+    tokens until the TOTP code is verified via ``/2fa/challenge/verify``.
+    """
+
+    access_token: str = ""
+    refresh_token: str = ""
+    user_id: str = ""
     email: str | None = None
     needs_username: bool = False
+    two_factor_required: bool = False
+    challenge: str | None = None
+
+
+class TwoFactorChallengeVerify(BaseModel):
+    """Finish a TOTP-gated login: the parked challenge id + a 6-digit code."""
+
+    challenge: str
+    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$", examples=["123456"])
 
 
 class UserResponse(BaseModel):

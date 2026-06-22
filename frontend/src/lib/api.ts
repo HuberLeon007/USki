@@ -176,6 +176,10 @@ export interface AuthResponse {
   user_id: string;
   email: string | null;
   needs_username: boolean;
+  /** When the account has TOTP enabled, the first factor returns this instead
+   *  of tokens; finish with verifyTwoFactorChallenge(challenge, code). */
+  two_factor_required?: boolean;
+  challenge?: string | null;
 }
 
 export interface UserResponse {
@@ -273,6 +277,14 @@ export async function disableTotp(code: string): Promise<TotpStatus> {
     { method: "POST", body: JSON.stringify({ code }) },
     { requireAuth: true },
   );
+}
+
+/** Finish a TOTP-gated login: exchange a challenge + code for real tokens. */
+export async function verifyTwoFactorChallenge(challenge: string, code: string): Promise<AuthResponse> {
+  return apiFetch<AuthResponse>("/auth/2fa/challenge/verify", {
+    method: "POST",
+    body: JSON.stringify({ challenge, code }),
+  });
 }
 
 // ── Devices & sessions (Security settings) ──────────────────────────────
