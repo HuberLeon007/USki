@@ -22,6 +22,7 @@ export function ShareDialog({ open, onOpenChange, deckId }: Props) {
   const [handle, setHandle] = useState("");
   const [permission, setPermission] = useState<Permission>("read");
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -30,6 +31,7 @@ export function ShareDialog({ open, onOpenChange, deckId }: Props) {
     if (open) {
       listShares(deckId).then(setShares).catch(() => setShares([]));
       setInviteLink(null);
+      setInviteCode(null);
       setCopied(false);
       setError(null);
     }
@@ -66,6 +68,7 @@ export function ShareDialog({ open, onOpenChange, deckId }: Props) {
       const inv = await createInvite(deckId, permission);
       // A full, shareable URL — opening it (signed in) redeems the invite once.
       setInviteLink(`${window.location.origin}/dashboard?invite=${inv.code}`);
+      setInviteCode(inv.code);
       setCopied(false);
     } catch {
       setError("Could not create an invite link.");
@@ -123,6 +126,27 @@ export function ShareDialog({ open, onOpenChange, deckId }: Props) {
           <Button type="button" variant="outline" className="h-10 w-full rounded-xl" onClick={makeLink} disabled={busy}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create invite link"}
           </Button>
+          {inviteCode && (
+            <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-background/60 p-1.5">
+              <span className="px-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Code</span>
+              <input
+                readOnly
+                value={inviteCode}
+                onFocus={(e) => e.currentTarget.select()}
+                className="min-w-0 flex-1 bg-transparent px-1 font-mono text-sm tracking-wider outline-none"
+                aria-label="Invite code"
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="h-8 shrink-0 gap-1.5 rounded-lg"
+                onClick={() => { navigator.clipboard?.writeText(inviteCode).catch(() => {}); }}
+              >
+                <Copy className="h-3.5 w-3.5" /> Copy
+              </Button>
+            </div>
+          )}
           {inviteLink && (
             <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-background/60 p-1.5">
               <input
@@ -137,7 +161,7 @@ export function ShareDialog({ open, onOpenChange, deckId }: Props) {
               </Button>
             </div>
           )}
-          {inviteLink && <p className="px-1 text-xs text-muted-foreground">Anyone with this link can join once. The link works a single time.</p>}
+          {inviteLink && <p className="px-1 text-xs text-muted-foreground">Share the code or link. Either one lets a person join once.</p>}
         </div>
 
         <div className="flex flex-col gap-1">

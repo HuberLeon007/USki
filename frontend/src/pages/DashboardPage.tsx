@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { Menu, Plus, Layers, Users, Loader2, FolderPlus, Folder, Play, Download, Search, Image as ImageIcon, LayoutGrid, List, X as XIcon, Trash2, ChevronDown, ArrowLeftRight, Bell } from "lucide-react";
@@ -443,6 +443,16 @@ export default function DashboardPage() {
                       onOpen={(id) => navigate(`/decks/${id}`)}
                       onLeave={(d) => setConfirm({ kind: "leave", deckId: d.id, title: d.title })}
                       onRevoke={(o) => setConfirm({ kind: "revoke", deckId: o.deck_id, granteeId: o.grantee_id, title: o.deck_title, grantee: o.grantee ?? "this user" })}
+                      onRedeem={async (code) => {
+                        try {
+                          await redeemInvite(code.trim());
+                          toast.success("Deck added to your shared decks");
+                          await refresh();
+                        } catch (e) {
+                          toast.error(e instanceof ApiError ? e.message : "This invite code is invalid or already used.");
+                          throw e;
+                        }
+                      }}
                     />
                   )}
                 </motion.div>
@@ -724,7 +734,7 @@ function DeckGrid({
 }
 
 function SharedPanel({
-  incoming, access, outgoing, onOpen, onLeave, onRevoke,
+  incoming, access, outgoing, onOpen, onLeave, onRevoke, onRedeem,
 }: {
   incoming: Deck[];
   access: Record<string, DeckAccess>;
@@ -732,9 +742,51 @@ function SharedPanel({
   onOpen: (id: string) => void;
   onLeave: (deck: Deck) => void;
   onRevoke: (share: OutgoingShare) => void;
+  onRedeem: (code: string) => Promise<void>;
 }) {
+  const [code, setCode] = useState("");
+  const [redeeming, setRedeeming] = useState(false);
+  // Accept either a bare code or a full invite link pasted in.
+  const extractCode = (raw: string): string => {
+    const m = raw.match(/[?&]invite=([^&\s]+)/);
+    return (m ? decodeURIComponent(m[1]) : raw).trim();
+  };
+  async function submitCode(e: FormEvent) {
+    e.preventDefault();
+    const c = extractCode(code);
+    if (!c || redeeming) return;
+    setRedeeming(true);
+    try {
+      await onRedeem(c);
+      setCode("");
+    } catch {
+      /* toast already shown by caller */
+    } finally {
+      setRedeeming(false);
+    }
+  }
   return (
     <div className="space-y-8">
+      {/* ── Join with an invite code (paste a code or an invite link) ── */}
+      <section className="space-y-3">
+        <h3 className="flex items-center gap-2 text-base font-semibold">
+          <Plus className="h-4 w-4 text-muted-foreground" /> Join a shared deck
+        </h3>
+        <form onSubmit={submitCode} className="flex gap-2">
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="Paste an invite code or link"
+            aria-label="Invite code"
+            className="h-10 min-w-0 flex-1 rounded-xl border border-input bg-background/60 px-3 text-sm outline-none transition-all focus-visible:border-primary/60 focus-visible:ring-4 focus-visible:ring-primary/15"
+          />
+          <Button type="submit" disabled={redeeming || !code.trim()} className="h-10 shrink-0 rounded-xl">
+            {redeeming ? <Loader2 className="h-4 w-4 animate-spin" /> : "Join"}
+          </Button>
+        </form>
+        <p className="text-xs text-muted-foreground">Someone shared a deck with you? Paste the code or link they sent to add it here.</p>
+      </section>
+
       {/* ── Shared with you — decks others granted you (remove = leave, final) ── */}
       <section className="space-y-3">
         <h3 className="flex items-center gap-2 text-base font-semibold">
