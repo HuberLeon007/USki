@@ -19,3 +19,10 @@ landing-after-rebuild.jpeg
 
 # Built mobile APK served by the web download page (too large for git)
 frontend/public/*.apk
+
+# AI agent tooling
+.agents/
+.codebuff/
+
+# OneDrive multi-machine duplicate conflict copies
+*-HuberLeonSurfaceStudio.*
