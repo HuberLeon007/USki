@@ -13,12 +13,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ApiError, sendOtp, verifyOtp } from "@/lib/api";
+import { ApiError, sendOtp, verifyOtp, verifyTwoFactorChallenge } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { ServerSettings } from "@/components/server-settings";
 import { Colors } from "@/constants/theme";
 
-type Step = "email" | "otp";
+type Step = "email" | "otp" | "totp";
 
 const PRIMARY = "#7c3aed"; // USki lila, matches the web primary.
 
@@ -36,6 +36,7 @@ export default function LoginScreen() {
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
+  const [challenge, setChallenge] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showServer, setShowServer] = useState(false);
@@ -70,10 +71,36 @@ export default function LoginScreen() {
     setError(null);
     try {
       const res = await verifyOtp(email, code.trim());
+      // TOTP-protected account: go to the authenticator-code step.
+      if (res.two_factor_required && res.challenge) {
+        setChallenge(res.challenge);
+        setCode("");
+        setStep("totp");
+        return;
+      }
       await signIn(res.access_token, res.refresh_token);
       router.replace("/");
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) setError("Wrong code. Please try again.");
+      else setError("Verification failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function submitTotp() {
+    if (code.trim().length < 6 || !challenge) {
+      setError("Enter the 6-digit code from your authenticator app.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await verifyTwoFactorChallenge(challenge, code.trim());
+      await signIn(res.access_token, res.refresh_token);
+      router.replace("/");
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) setError("Wrong code. Enter the current one from your app.");
       else setError("Verification failed. Please try again.");
     } finally {
       setLoading(false);
@@ -90,12 +117,14 @@ export default function LoginScreen() {
           <View style={styles.header}>
             <Text style={[styles.brand, { color: PRIMARY }]}>USki</Text>
             <Text style={[styles.title, { color: c.text }]}>
-              {step === "email" ? "Sign in" : "Check your email"}
+              {step === "email" ? "Sign in" : step === "totp" ? "Two-step verification" : "Check your email"}
             </Text>
             <Text style={[styles.subtitle, { color: c.textSecondary }]}>
               {step === "email"
                 ? "We'll email you a one-time code. No password needed."
-                : `Enter the 6-digit code we sent to ${email}.`}
+                : step === "totp"
+                  ? "Enter the 6-digit code from your authenticator app."
+                  : `Enter the 6-digit code we sent to ${email}.`}
             </Text>
           </View>
 
@@ -136,7 +165,7 @@ export default function LoginScreen() {
                 setCode(t.replace(/\D/g, ""));
                 setError(null);
               }}
-              onSubmitEditing={submitCode}
+              onSubmitEditing={step === "totp" ? submitTotp : submitCode}
               returnKeyType="go"
             />
           )}
@@ -150,28 +179,31 @@ export default function LoginScreen() {
           <Pressable
             accessibilityRole="button"
             disabled={loading}
-            onPress={step === "email" ? submitEmail : submitCode}
+            onPress={step === "email" ? submitEmail : step === "totp" ? submitTotp : submitCode}
             style={({ pressed }) => [styles.button, { backgroundColor: PRIMARY, opacity: loading ? 0.6 : pressed ? 0.85 : 1 }]}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.buttonText}>{step === "email" ? "Continue" : "Verify and sign in"}</Text>
+              <Text style={styles.buttonText}>{step === "email" ? "Continue" : step === "totp" ? "Verify" : "Verify and sign in"}</Text>
             )}
           </Pressable>
 
-          {step === "otp" && (
+          {step !== "email" && (
             <Pressable
               accessibilityRole="button"
               disabled={loading}
               onPress={() => {
                 setStep("email");
                 setCode("");
+                setChallenge(null);
                 setError(null);
               }}
               style={styles.linkButton}
             >
-              <Text style={[styles.linkText, { color: c.textSecondary }]}>Use a different email</Text>
+              <Text style={[styles.linkText, { color: c.textSecondary }]}>
+                {step === "totp" ? "Start over" : "Use a different email"}
+              </Text>
             </Pressable>
           )}
 

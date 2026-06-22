@@ -110,6 +110,8 @@ export interface AuthResponse {
   user_id: string;
   email: string | null;
   needs_username: boolean;
+  two_factor_required?: boolean;
+  challenge?: string | null;
 }
 
 export interface UserResponse {
@@ -379,6 +381,39 @@ export const markNotificationsSeen = (ids: string[]) =>
 export const getTwoFactor = () => apiFetch<TwoFactorResponse>("/auth/2fa", {}, authed);
 export const setTwoFactor = (enabled: boolean) =>
   apiFetch<TwoFactorResponse>("/auth/2fa", { method: "PATCH", body: JSON.stringify({ enabled }) }, authed);
+
+// ── App-based TOTP second factor (authenticator apps) ─────────────────────
+export interface TotpStatus { enabled: boolean; pending?: boolean }
+export interface TotpSetup { secret: string; otpauth_uri: string }
+
+export const getTotpStatus = () => apiFetch<TotpStatus>("/auth/2fa/totp", {}, authed);
+export const setupTotp = () => apiFetch<TotpSetup>("/auth/2fa/totp/setup", { method: "POST" }, authed);
+export const verifyTotp = (code: string) =>
+  apiFetch<TotpStatus>("/auth/2fa/totp/verify", { method: "POST", body: JSON.stringify({ code }) }, authed);
+export const disableTotp = (code: string) =>
+  apiFetch<TotpStatus>("/auth/2fa/totp/disable", { method: "POST", body: JSON.stringify({ code }) }, authed);
+
+/** Finish a TOTP-gated login: exchange a parked challenge + code for tokens. */
+export const verifyTwoFactorChallenge = (challenge: string, code: string) =>
+  apiFetch<AuthResponse>("/auth/2fa/challenge/verify", { method: "POST", body: JSON.stringify({ challenge, code }) });
+
+// ── Devices & sessions ────────────────────────────────────────────────────
+export interface SessionInfo {
+  id: string;
+  device: string | null;
+  ip: string | null;
+  city: string | null;
+  country: string | null;
+  lat: number | null;
+  lon: number | null;
+  created_at: string | null;
+  last_seen_at: string | null;
+  current: boolean;
+}
+export const listSessions = (currentKey = "") =>
+  apiFetch<SessionInfo[]>(`/auth/sessions?current_key=${encodeURIComponent(currentKey)}`, {}, authed);
+export const revokeSessionById = (id: string) =>
+  apiFetch<MessageResponse>(`/auth/sessions/${id}`, { method: "DELETE" }, authed);
 
 // ── Chat (Sero) ───────────────────────────────────────────────────────────
 export interface ChatApiMessage {
