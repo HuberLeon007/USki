@@ -236,6 +236,45 @@ export async function setTwoFactor(enabled: boolean): Promise<TwoFactorResponse>
   );
 }
 
+// ── App-based TOTP second factor (authenticator apps) ───────────────────
+export interface TotpStatus {
+  enabled: boolean;
+  pending?: boolean;
+}
+
+export interface TotpSetup {
+  secret: string;
+  otpauth_uri: string;
+}
+
+/** Current TOTP state (active, and whether a setup is mid-flight). */
+export async function getTotpStatus(): Promise<TotpStatus> {
+  return apiFetch<TotpStatus>("/auth/2fa/totp", {}, { requireAuth: true });
+}
+
+/** Begin enrollment: returns the secret + otpauth URI to render a QR. */
+export async function setupTotp(): Promise<TotpSetup> {
+  return apiFetch<TotpSetup>("/auth/2fa/totp/setup", { method: "POST" }, { requireAuth: true });
+}
+
+/** Confirm enrollment with a 6-digit code from the authenticator app. */
+export async function verifyTotp(code: string): Promise<TotpStatus> {
+  return apiFetch<TotpStatus>(
+    "/auth/2fa/totp/verify",
+    { method: "POST", body: JSON.stringify({ code }) },
+    { requireAuth: true },
+  );
+}
+
+/** Turn TOTP off (requires a valid current code). */
+export async function disableTotp(code: string): Promise<TotpStatus> {
+  return apiFetch<TotpStatus>(
+    "/auth/2fa/totp/disable",
+    { method: "POST", body: JSON.stringify({ code }) },
+    { requireAuth: true },
+  );
+}
+
 // ── Devices & sessions (Security settings) ──────────────────────────────
 export interface SessionInfo {
   id: string;

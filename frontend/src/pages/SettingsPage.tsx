@@ -31,8 +31,10 @@ import {
   changeUsernameFull,
   checkUsername,
   getMe,
-  getTwoFactor,
-  setTwoFactor,
+  getTotpStatus,
+  setupTotp,
+  verifyTotp,
+  disableTotp,
   listSessions,
   revokeSessionById,
   revokeOtherSessions,
@@ -44,7 +46,10 @@ import {
   type UserResponse,
   type SessionInfo,
   type PasskeyInfo,
+  type TotpStatus,
+  type TotpSetup,
 } from "@/lib/api";
+import QRCode from "qrcode";
 import { cn } from "@/lib/utils";
 
 /** The settings sections, rendered as a left rail (desktop) / top row (mobile). */
@@ -471,100 +476,164 @@ function AssistantPanel() {
   );
 }
 
-/** Email-OTP second factor toggle, backed by GET/PATCH /api/auth/2fa. */
+/** App-based TOTP second factor: enroll via QR, verify, and disable.
+ *  Backed by /api/auth/2fa/totp (setup/verify/disable). The secret is rendered
+ *  into a QR locally so it never leaves the browser. */
 function SecurityPanel({ endSession }: { endSession: () => void }) {
-  const { refreshUser } = useAuth();
-  const [enabled, setEnabled] = useState<boolean | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<TotpStatus | null>(null);
+  const [setup, setSetup] = useState<TotpSetup | null>(null);
+  const [qr, setQr] = useState<string | null>(null);
+  const [code, setCode] = useState("");
+  const [disarm, setDisarm] = useState(false); // showing the disable code field
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    getTwoFactor()
-      .then((r) => {
-        if (!cancelled) setEnabled(r.enabled);
-      })
+    getTotpStatus()
+      .then((s) => { if (!cancelled) setStatus(s); })
       .catch((err) => {
-        if (err instanceof SessionExpiredError) {
-          endSession();
-          return;
-        }
-        if (!cancelled) {
-          setEnabled(false);
-          setError("Could not load your 2FA setting.");
-        }
+        if (err instanceof SessionExpiredError) { endSession(); return; }
+        if (!cancelled) { setStatus({ enabled: false }); setError("Could not load two-factor status."); }
       });
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [endSession]);
 
-  const toggle = useCallback(async () => {
-    if (enabled === null || saving) return;
-    const next = !enabled;
-    setSaving(true);
-    setError(null);
-    // Optimistic flip so the switch feels instant; revert on failure.
-    setEnabled(next);
+  const begin = useCallback(async () => {
+    setBusy(true); setError(null);
     try {
-      const result = await setTwoFactor(next);
-      setEnabled(result.enabled);
-      refreshUser();
+      const s = await setupTotp();
+      setSetup(s);
+      setQr(await QRCode.toDataURL(s.otpauth_uri, { width: 220, margin: 1 }));
     } catch (err) {
-      setEnabled(!next);
-      if (err instanceof SessionExpiredError) {
-        endSession();
-        return;
-      }
-      setError("Could not update 2FA. Please try again.");
+      if (err instanceof SessionExpiredError) { endSession(); return; }
+      setError("Could not start setup. Please try again.");
     } finally {
-      setSaving(false);
+      setBusy(false);
     }
-  }, [enabled, saving, refreshUser, endSession]);
+  }, [endSession]);
 
-  const loading = enabled === null;
-  const on = enabled === true;
+  const confirm = useCallback(async () => {
+    if (code.trim().length !== 6 || busy) return;
+    setBusy(true); setError(null);
+    try {
+      const s = await verifyTotp(code.trim());
+      setStatus(s); setSetup(null); setQr(null); setCode("");
+    } catch (err) {
+      if (err instanceof SessionExpiredError) { endSession(); return; }
+      setError("That code didn't match. Enter the current one from your app.");
+    } finally {
+      setBusy(false);
+    }
+  }, [code, busy, endSession]);
+
+  const turnOff = useCallback(async () => {
+    if (code.trim().length !== 6 || busy) return;
+    setBusy(true); setError(null);
+    try {
+      const s = await disableTotp(code.trim());
+      setStatus(s); setDisarm(false); setCode("");
+    } catch (err) {
+      if (err instanceof SessionExpiredError) { endSession(); return; }
+      setError("That code didn't match. Enter the current one to turn 2FA off.");
+    } finally {
+      setBusy(false);
+    }
+  }, [code, busy, endSession]);
+
+  const loading = status === null;
+  const on = status?.enabled === true;
 
   return (
     <Section
       title="Two-factor authentication"
-      description="Add an email one-time code as a second step when signing in."
+      description="Protect sign-in with a code from an authenticator app (Google Authenticator, 1Password, Authy)."
     >
-      <div className="flex items-center justify-between gap-4 rounded-xl border border-border/50 bg-background/40 p-4">
-        <div className="min-w-0">
-          <p className="text-sm font-medium">Email verification code</p>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            {loading
-              ? "Loading..."
-              : on
-                ? "On - we'll email a code at sign-in."
-                : "Off - sign in with one step only."}
-          </p>
+      {loading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Spinner className="h-4 w-4 animate-spin" /> Loading...
         </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={on}
-          aria-label="Toggle email two-factor authentication"
-          disabled={loading || saving}
-          onClick={toggle}
-          className={cn(
-            "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60",
-            on ? "bg-primary" : "bg-muted",
-          )}
-        >
-          <span
-            className={cn(
-              "inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-200",
-              on ? "translate-x-6" : "translate-x-1",
+      ) : on ? (
+        <div className="rounded-xl border border-border/50 bg-background/40 p-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="flex items-center gap-2 text-sm font-medium">
+                Authenticator app
+                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-500">On</span>
+              </p>
+              <p className="mt-0.5 text-sm text-muted-foreground">You'll enter a code from your app at sign-in.</p>
+            </div>
+            {!disarm && (
+              <Button variant="outline" size="sm" className="h-9 shrink-0 rounded-lg" onClick={() => { setError(null); setDisarm(true); }}>
+                Turn off
+              </Button>
             )}
-          />
-          {saving && (
-            <Loader2 className="absolute -right-6 h-4 w-4 animate-spin text-muted-foreground" />
+          </div>
+          {disarm && (
+            <div className="mt-3 space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">Enter a current code to turn off</label>
+              <div className="flex gap-2">
+                <input
+                  autoFocus
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                  placeholder="123456"
+                  className="h-10 w-32 rounded-lg border border-border/60 bg-background px-3 text-center tracking-widest tabular-nums outline-none focus-visible:ring-4 focus-visible:ring-primary/20"
+                />
+                <Button variant="destructive" className="h-10 rounded-lg" disabled={busy || code.length !== 6} onClick={turnOff}>
+                  {busy ? <Spinner className="h-4 w-4 animate-spin" /> : "Turn off 2FA"}
+                </Button>
+                <Button variant="ghost" className="h-10 rounded-lg" disabled={busy} onClick={() => { setDisarm(false); setCode(""); setError(null); }}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
           )}
-        </button>
-      </div>
-      {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
+        </div>
+      ) : setup ? (
+        <div className="space-y-4 rounded-xl border border-border/50 bg-background/40 p-4">
+          <p className="text-sm text-muted-foreground">
+            Scan this with your authenticator app, then enter the 6-digit code it shows.
+          </p>
+          <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-start">
+            {qr && <img src={qr} alt="Authenticator setup QR code" width={180} height={180} className="rounded-lg border border-border/40 bg-white p-2" />}
+            <div className="min-w-0 flex-1 space-y-2">
+              <p className="text-xs text-muted-foreground">Can't scan? Enter this key manually:</p>
+              <code className="block break-all rounded-lg bg-muted px-3 py-2 text-xs">{setup.secret}</code>
+              <div className="flex gap-2">
+                <input
+                  autoFocus
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                  placeholder="123456"
+                  className="h-10 w-32 rounded-lg border border-border/60 bg-background px-3 text-center tracking-widest tabular-nums outline-none focus-visible:ring-4 focus-visible:ring-primary/20"
+                />
+                <Button className="h-10 flex-1 rounded-lg font-semibold" disabled={busy || code.length !== 6} onClick={confirm}>
+                  {busy ? <Spinner className="h-4 w-4 animate-spin" /> : "Verify and turn on"}
+                </Button>
+              </div>
+            </div>
+          </div>
+          <Button variant="ghost" className="h-9 rounded-lg" disabled={busy} onClick={() => { setSetup(null); setQr(null); setCode(""); setError(null); }}>
+            Cancel
+          </Button>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-border/50 bg-background/40 p-4">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Authenticator app</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">Off - sign in with one step only.</p>
+          </div>
+          <Button size="sm" className="h-9 shrink-0 gap-2 rounded-lg font-semibold" disabled={busy} onClick={begin}>
+            {busy ? <Spinner className="h-4 w-4 animate-spin" /> : "Set up"}
+          </Button>
+        </div>
+      )}
+      {error && <p className="mt-3 text-sm text-destructive" role="alert">{error}</p>}
     </Section>
   );
 }
