@@ -30,7 +30,6 @@ export default function DashboardPage() {
   const uid = user?.id ?? "anon";
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [navCollapsed, setNavCollapsed] = useState(false);
   const [showUsernameDialog, setShowUsernameDialog] = useState(false);
   const [assistantReserved, setAssistantReserved] = useState(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -299,8 +298,6 @@ export default function DashboardPage() {
   return (
     <div className="flex min-h-[100dvh] bg-background">
       <Sidebar
-        collapsed={navCollapsed}
-        onToggleCollapse={() => setNavCollapsed((v) => !v)}
         onOpenSettings={() => navigate("/settings")}
         mobileOpen={mobileNavOpen}
         onCloseMobile={() => setMobileNavOpen(false)}

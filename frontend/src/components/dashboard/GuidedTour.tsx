@@ -147,8 +147,10 @@ export function GuidedTour({ steps, onClose, onFinish, finishLabel = "Finish", o
       <div className="absolute inset-0" onClick={(e) => e.stopPropagation()} />
 
       {/* Animated hand cursor gliding to the target. White with a dark shadow so
-          it stays visible on both the dark dim and the purple primary buttons. */}
-      {!reduce && (
+          it stays visible on both the dark dim and the purple primary buttons.
+          Only shown when there's an actual target to point at — on centered
+          intro/outro steps it would just sit behind the tooltip card. */}
+      {!reduce && box && (
         <motion.div
           className="pointer-events-none absolute z-[210] text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]"
           initial={false}

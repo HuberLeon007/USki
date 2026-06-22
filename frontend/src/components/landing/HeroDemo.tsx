@@ -15,7 +15,6 @@ import {
   List,
   X,
   ChevronDown,
-  PanelLeftClose,
   Maximize2,
   Minimize2,
   MousePointer2,
@@ -28,8 +27,8 @@ import { StateCounts } from "@/lib/state-counts";
  * HeroDemo — a self-contained, client-only 16:9 mock of the USki dashboard (R3).
  * When the whole frame scrolls into view it (1) fades its UI in, then (2) plays a
  * short NON-interactive intro: a fake cursor opens Sero from its notification
- * bubble and docks it. Afterwards it's fully interactive (collapse nav, switch
- * views, resize / minimize Sero). No backend, no routing, only demo constants.
+ * bubble and docks it. Afterwards it's fully interactive (switch views, resize /
+ * minimize Sero). No backend, no routing, only demo constants.
  */
 
 type DemoView = "overview" | "decks" | "browse" | "shared";
@@ -100,7 +99,6 @@ export function HeroDemo(): JSX.Element {
   const windowRef = useRef<HTMLDivElement>(null);
 
   const [view, setView] = useState<DemoView>("overview");
-  const [navCollapsed, setNavCollapsed] = useState(false);
   const [sero, setSero] = useState<SeroState>("bubble");
   const [dockWidth, setDockWidth] = useState(DOCK_DEFAULT);
   const [win, setWin] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -251,39 +249,13 @@ export function HeroDemo(): JSX.Element {
 
         {/* app row (relative so the docked panel can slide in over reserved padding) */}
         <div className="relative flex min-h-0 flex-1">
-          {/* ── Left sidebar (collapsible) ───────── */}
-          <aside
-            className={cn(
-              "z-10 flex shrink-0 flex-col border-r border-border/50 bg-card/80 transition-[width] duration-300",
-              navCollapsed ? "w-12" : "w-48",
-            )}
-          >
-            <div className={cn("flex h-11 items-center", navCollapsed ? "justify-center px-0" : "gap-2 px-3")}>
-              {navCollapsed ? (
-                <button
-                  type="button"
-                  onClick={() => interactive && setNavCollapsed(false)}
-                  aria-label="Expand sidebar"
-                  className="flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-accent"
-                >
-                  <img src="/logo.png" alt="" className="h-5 w-5 rounded" />
-                </button>
-              ) : (
-                <>
-                  <span className="flex items-center gap-1.5 text-sm font-bold tracking-tight">
-                    <img src="/logo.png" alt="" className="h-5 w-5 rounded" />
-                    <span><span className="text-primary">US</span><span className="text-foreground">ki</span></span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => interactive && setNavCollapsed(true)}
-                    aria-label="Collapse sidebar"
-                    className="ml-auto flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  >
-                    <PanelLeftClose className="h-3.5 w-3.5" />
-                  </button>
-                </>
-              )}
+          {/* ── Left sidebar ───────── */}
+          <aside className="z-10 flex w-48 shrink-0 flex-col border-r border-border/50 bg-card/80">
+            <div className="flex h-11 items-center gap-2 px-3">
+              <span className="flex items-center gap-1.5 text-sm font-bold tracking-tight">
+                <img src="/logo.png" alt="" className="h-5 w-5 rounded" />
+                <span><span className="text-primary">US</span><span className="text-foreground">ki</span></span>
+              </span>
             </div>
 
             <nav className="flex-1 space-y-1 px-2 py-2">
@@ -297,23 +269,22 @@ export function HeroDemo(): JSX.Element {
                     onClick={() => interactive && setView(item.id)}
                     title={item.label}
                     className={cn(
-                      "flex w-full items-center gap-2.5 rounded-lg py-2 text-left text-xs font-medium transition-colors",
-                      navCollapsed ? "justify-center px-0" : "px-2.5",
+                      "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-colors",
                       active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
                     )}
                   >
                     <Icon className={cn("h-4 w-4 shrink-0", active && "text-primary")} />
-                    {!navCollapsed && <span className="flex-1 truncate">{item.label}</span>}
+                    <span className="flex-1 truncate">{item.label}</span>
                   </button>
                 );
               })}
             </nav>
 
             <div className="border-t border-border/50 p-2">
-              <div className={cn("flex items-center gap-2.5 rounded-lg py-1.5", navCollapsed ? "justify-center px-0" : "px-2")}>
+              <div className="flex items-center gap-2.5 rounded-lg px-2 py-1.5">
                 <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/60 text-[10px] font-semibold text-primary-foreground">u</div>
-                {!navCollapsed && <span className="flex-1 truncate font-mono text-[11px] text-foreground">uski#0001</span>}
-                {!navCollapsed && <Settings className="h-3.5 w-3.5 text-muted-foreground" />}
+                <span className="flex-1 truncate font-mono text-[11px] text-foreground">uski#0001</span>
+                <Settings className="h-3.5 w-3.5 text-muted-foreground" />
               </div>
             </div>
           </aside>

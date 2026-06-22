@@ -1,8 +1,6 @@
 import {
   Settings,
   X,
-  PanelLeftClose,
-  PanelLeft,
   LayoutDashboard,
   Layers,
   Users,
@@ -18,8 +16,6 @@ import type { UserResponse } from "@/lib/api";
 export type DashboardView = "overview" | "decks" | "shared" | "browse";
 
 export interface SidebarProps {
-  collapsed: boolean;
-  onToggleCollapse: () => void;
   onOpenSettings: () => void;
   mobileOpen?: boolean;
   onCloseMobile?: () => void;
@@ -34,13 +30,11 @@ export interface SidebarProps {
  * Dashboard side navigation.
  *
  * Three fixed top-level entries (Overview / Decks / Shared) — no per-deck rows
- * that would grow the nav unbounded. A search box filters decks/folders and is
- * the entry point for searching all cards. Settings sits in the footer profile
- * row (single account control).
+ * that would grow the nav unbounded. Settings sits in the footer profile row
+ * (single account control). The sidebar is always full-width on desktop; on
+ * mobile it's a drawer closed with the X (no collapse mode).
  */
 export function Sidebar({
-  collapsed,
-  onToggleCollapse,
   onOpenSettings,
   mobileOpen = false,
   onCloseMobile,
@@ -63,36 +57,24 @@ export function Sidebar({
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex flex-col overflow-hidden border-r border-border/50 bg-card/80 backdrop-blur-xl transition-[width,transform] duration-300 ease-out md:static md:translate-x-0",
-          collapsed ? "w-[4.5rem]" : "w-64",
+          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col overflow-hidden border-r border-border/50 bg-card/80 backdrop-blur-xl transition-transform duration-300 ease-out md:static md:translate-x-0",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
         {/* Header */}
-        <div className={cn("flex h-16 items-center px-4", collapsed ? "justify-center" : "justify-between")}>
-          {!collapsed && <Logo />}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hidden md:inline-flex"
-            onClick={onToggleCollapse}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {collapsed ? <PanelLeft className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
+        <div className="flex h-16 items-center justify-between px-4">
+          <Logo />
+          <Button variant="ghost" size="icon" className="md:hidden" onClick={onCloseMobile} aria-label="Close menu">
+            <X className="h-5 w-5" />
           </Button>
-          {!collapsed && (
-            <Button variant="ghost" size="icon" className="md:hidden" onClick={onCloseMobile} aria-label="Close menu">
-              <X className="h-5 w-5" />
-            </Button>
-          )}
         </div>
 
         {/* Nav — fixed top-level items only (no badges, no search). */}
         <nav className="flex-1 space-y-1 px-3 py-2" style={{ scrollbarGutter: "stable" }}>
-          <NavItem icon={LayoutDashboard} label="Overview" collapsed={collapsed} active={view === "overview"} onClick={() => onSelectView("overview")} />
-          <NavItem icon={Layers} label="Decks" collapsed={collapsed} active={view === "decks"} onClick={() => onSelectView("decks")} dataTour="nav-decks" />
-          <NavItem icon={FolderSearch} label="Browse" collapsed={collapsed} active={view === "browse"} onClick={() => onSelectView("browse")} dataTour="nav-browse" />
-          <NavItem icon={Users} label="Shared" collapsed={collapsed} active={view === "shared"} onClick={() => onSelectView("shared")} dataTour="nav-shared" />
+          <NavItem icon={LayoutDashboard} label="Overview" active={view === "overview"} onClick={() => onSelectView("overview")} />
+          <NavItem icon={Layers} label="Decks" active={view === "decks"} onClick={() => onSelectView("decks")} dataTour="nav-decks" />
+          <NavItem icon={FolderSearch} label="Browse" active={view === "browse"} onClick={() => onSelectView("browse")} dataTour="nav-browse" />
+          <NavItem icon={Users} label="Shared" active={view === "shared"} onClick={() => onSelectView("shared")} dataTour="nav-shared" />
         </nav>
 
         {/* Account footer = settings entry */}
@@ -101,7 +83,7 @@ export function Sidebar({
             type="button"
             onClick={onOpenSettings}
             data-tour="settings"
-            title={collapsed ? (displayName ?? "Account") : "Open settings"}
+            title="Open settings"
             aria-label="Open settings"
             className="group flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-accent/60"
           >
@@ -112,15 +94,14 @@ export function Sidebar({
             ) : (
               <div className="h-8 w-8 shrink-0 animate-pulse rounded-full bg-muted" />
             )}
-            {!collapsed &&
-              (hasUsername ? (
-                <>
-                  <p className="flex-1 truncate font-mono text-xs">{displayName}</p>
-                  <Settings className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />
-                </>
-              ) : (
-                <div className="h-3 flex-1 animate-pulse rounded bg-muted" aria-label="Loading username" />
-              ))}
+            {hasUsername ? (
+              <>
+                <p className="flex-1 truncate font-mono text-xs">{displayName}</p>
+                <Settings className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />
+              </>
+            ) : (
+              <div className="h-3 flex-1 animate-pulse rounded bg-muted" aria-label="Loading username" />
+            )}
           </button>
         </div>
       </aside>
@@ -131,29 +112,23 @@ export function Sidebar({
 interface NavItemProps {
   icon: typeof Layers;
   label: string;
-  collapsed: boolean;
   active: boolean;
   onClick: () => void;
   dataTour?: string;
 }
 
-function NavItem({ icon: Icon, label, collapsed, active, onClick, dataTour }: NavItemProps) {
+function NavItem({ icon: Icon, label, active, onClick, dataTour }: NavItemProps) {
   return (
     <button
       onClick={onClick}
       data-tour={dataTour}
-      title={collapsed ? label : undefined}
       className={cn(
         "group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
         active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
       )}
     >
       <Icon className={cn("h-5 w-5 shrink-0", active && "text-primary")} />
-      {/* Label stays mounted and left-anchored; it fades + clips on collapse so
-          icons never spring to the center (smooth both ways). */}
-      <span className={cn("flex-1 truncate whitespace-nowrap text-left transition-opacity duration-200", collapsed && "pointer-events-none opacity-0")}>
-        {label}
-      </span>
+      <span className="flex-1 truncate whitespace-nowrap text-left">{label}</span>
     </button>
   );
 }
