@@ -499,6 +499,15 @@ export const listSessions = (currentKey = "") =>
 export const revokeSessionById = (id: string) =>
   apiFetch<MessageResponse>(`/auth/sessions/${id}`, { method: "DELETE" }, authed);
 
+/** Record this device/session after an OAuth login that bypassed the backend
+ *  (OTP and passkey logins are already recorded server-side). Best-effort. */
+export const recordSession = (refreshToken: string) =>
+  apiFetch<MessageResponse>(
+    "/auth/session/record",
+    { method: "POST", body: JSON.stringify({ refresh_token: refreshToken }) },
+    authed,
+  );
+
 // ── Chat (Sero) ───────────────────────────────────────────────────────────
 export interface ChatApiMessage {
   role: "system" | "user" | "assistant";

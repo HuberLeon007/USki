@@ -31,6 +31,7 @@ from uski.schemas.auth import (
     PasskeyLoginVerify,
     PasskeyRegisterVerify,
     RefreshRequest,
+    RecordSessionRequest,
     RevokeOthersRequest,
     SendOtpRequest,
     SessionInfo,
@@ -672,6 +673,26 @@ async def revoke_other_sessions_endpoint(
     """Sign out every device except the caller's current one."""
     removed = revoke_other_sessions(current_user.id, body.current_key)
     return MessageResponse(message=f"Signed out {removed} other device(s).")
+
+
+@router.post("/session/record", response_model=MessageResponse)
+async def record_session(
+    body: RecordSessionRequest,
+    request: Request,
+    background: BackgroundTasks,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> MessageResponse:
+    """Record device/session for a login that completed client-side (OAuth).
+
+    OTP and passkey logins are captured server-side already. Social OAuth runs
+    entirely through Supabase on the client and never touches the backend login
+    path, so the app/web calls this once right after installing the session -
+    that's what makes the device show up in Security with its IP, device label
+    and map location, and fires the login-alert email. Idempotent: the session
+    row is keyed by a hash of the refresh token (upsert).
+    """
+    _capture_login(current_user.id, current_user.email, body.refresh_token, request, background)
+    return MessageResponse(message="Session recorded.")
 
 
 # ──────────────────────────────────────────────────────────────────────────

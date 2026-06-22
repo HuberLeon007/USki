@@ -203,6 +203,17 @@ class RefreshRequest(BaseModel):
     )
 
 
+class RecordSessionRequest(BaseModel):
+    """Record a device/session for a login that completed client-side.
+
+    OTP and passkey logins are recorded server-side already; social OAuth runs
+    entirely through Supabase on the client, so the app/web posts the resulting
+    refresh token here once so the device appears in Security with IP + map.
+    """
+
+    refresh_token: str = Field(..., description="The refresh token of the freshly installed session")
+
+
 class MockSocialRequest(BaseModel):
     """Request to mint an offline development session for a Mock_Identity.
 

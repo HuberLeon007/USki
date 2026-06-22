@@ -20,6 +20,15 @@
 		file_server
 	}
 
+	# Android app download. Place the built APK at frontend/public/uski.apk so
+	# it ships into /srv; served with the right type (never the SPA fallback).
+	handle /uski.apk {
+		root * /srv
+		header Content-Type application/vnd.android.package-archive
+		header Content-Disposition "attachment; filename=uski.apk"
+		file_server
+	}
+
 	# Everything else → the static SPA, with history-API fallback.
 	handle {
 		root * /srv

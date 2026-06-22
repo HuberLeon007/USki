@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { motion, useReducedMotion, type Variants } from "motion/react";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight, Sparkles, Download } from "lucide-react";
 
 export function CTASection() {
   const reduce = useReducedMotion();
@@ -102,6 +102,17 @@ export function CTASection() {
                 <ArrowRight className="relative h-4 w-4 transition-transform duration-300 group-hover/btn:translate-x-1" />
               </Link>
             </motion.div>
+          </motion.div>
+
+          <motion.div variants={item}>
+            <a
+              href="/uski.apk"
+              download
+              className="inline-flex items-center gap-2 rounded-xl border border-border/70 bg-background/40 px-6 py-3 text-sm font-medium text-foreground/90 transition-colors hover:bg-background/70 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/30"
+            >
+              <Download className="h-4 w-4" />
+              Download the Android app (APK)
+            </a>
           </motion.div>
         </motion.div>
       </motion.div>

@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { useTheme } from "next-themes";
 import { Moon, Sun, ArrowLeft, KeyRound } from "lucide-react";
-import { sendOtp, verifyOtp, getMe, tokenStorage, loginWithPasskey, verifyTwoFactorChallenge, ApiError } from "@/lib/api";
+import { sendOtp, verifyOtp, getMe, tokenStorage, loginWithPasskey, verifyTwoFactorChallenge, recordSession, ApiError } from "@/lib/api";
 import { useAuth } from "@/app/auth-context";
 import { Button } from "@/components/ui/button";
 import { EmailStep } from "@/components/auth/EmailStep";
@@ -228,6 +228,8 @@ export default function LoginPage() {
         }
         // No second factor: complete exactly like the OTP path.
         setSession(s.access_token, s.refresh_token, s.user_id, s.email, s.needs_username);
+        // OAuth completed client-side, so record the device/session (IP + map).
+        void recordSession(s.refresh_token).catch(() => {});
         navigate("/dashboard", { replace: true });
         return;
       }

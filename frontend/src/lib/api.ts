@@ -327,6 +327,16 @@ export async function revokeOtherSessions(): Promise<MessageResponse> {
   );
 }
 
+/** Record this device/session after an OAuth login that completed client-side
+ *  (OTP and passkey logins are already recorded server-side). Best-effort. */
+export async function recordSession(refreshToken: string): Promise<void> {
+  await apiFetch<MessageResponse>(
+    "/auth/session/record",
+    { method: "POST", body: JSON.stringify({ refresh_token: refreshToken }) },
+    { requireAuth: true },
+  );
+}
+
 // ── Passkeys / WebAuthn ─────────────────────────────────────────────────
 export interface PasskeyInfo {
   id: string;

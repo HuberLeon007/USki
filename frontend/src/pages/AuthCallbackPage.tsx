@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useReducedMotion, motion } from "motion/react";
 import { useAuth } from "@/app/auth-context";
 import { createSupabaseBroker } from "@/lib/social/create-broker";
+import { recordSession } from "@/lib/api";
 import { Logo } from "@/components/Logo";
 
 /**
@@ -41,6 +42,9 @@ export default function AuthCallbackPage() {
         if (outcome.kind === "session") {
           const s = outcome.session;
           setSession(s.access_token, s.refresh_token, s.user_id, s.email, s.needs_username);
+          // OAuth completes client-side via Supabase, so record the device/
+          // session explicitly (IP + map + login alert). Best-effort.
+          void recordSession(s.refresh_token).catch(() => {});
           // Reconcile needs_username against the backend so onboarding gating
           // reflects the authoritative profile, not just session metadata.
           await refreshUser();

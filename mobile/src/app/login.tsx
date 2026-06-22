@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ApiError, sendOtp, verifyOtp, verifyTwoFactorChallenge } from "@/lib/api";
+import { ApiError, recordSession, sendOtp, verifyOtp, verifyTwoFactorChallenge } from "@/lib/api";
 import { signInWithProvider, supabaseConfigured, type Provider } from "@/lib/social";
 import { loginWithPasskey, passkeysSupported } from "@/lib/passkey";
 import { useAuth } from "@/lib/auth";
@@ -73,6 +73,9 @@ export default function LoginScreen() {
       const r = await signInWithProvider(provider);
       if (r.ok) {
         await signIn(r.access_token, r.refresh_token);
+        // OAuth bypasses the backend login path, so record the device/session
+        // explicitly (IP + map + login alert). Best-effort, never blocks login.
+        recordSession(r.refresh_token).catch(() => {});
         router.replace("/");
         return;
       }
