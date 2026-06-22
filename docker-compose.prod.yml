@@ -18,8 +18,13 @@ services:
       # Embeddings run on the local Ollama (sibling service), 768-dim model.
       - AI_BASE_URL=http://ollama:11434/v1
       - AI_EMBED_MODEL=${AI_EMBED_MODEL:-nomic-embed-text}
+      # Chat provider pool (mounted below). Round-robined for chat.
+      - AI_PROVIDERS_FILE=/app/ai_providers.json
       # Rate-limit store on the sibling Redis.
       - RATE_LIMIT_REDIS_URL=redis://redis:6379
+    volumes:
+      # Chat provider pool — kept out of the image (gitignored secrets), mounted read-only.
+      - ./ai_providers.json:/app/ai_providers.json:ro
     expose:
       - "8000"
     depends_on:
