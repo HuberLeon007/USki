@@ -13,9 +13,14 @@ dist/
 # Local tooling / test artifacts
 .playwright-cli/
 .playwright-mcp/
+test-results/
 .kiro/settings/
 *.local.json
 landing-after-rebuild.jpeg
+
+# Extra env files (only .env.example is tracked)
+.env.prod
+.env.local
 
 # Built mobile APK served by the web download page (too large for git)
 frontend/public/*.apk

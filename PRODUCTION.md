@@ -31,7 +31,7 @@ in **Supabase Cloud (EU region)** so it survives server reboots and is backed up
 - `docker-compose.prod.yml` — the whole prod stack (backend, web, ollama, redis, cloudflared).
 - `backend/Dockerfile.prod` — FastAPI image (uvicorn, no reload, no source mount).
 - `frontend/Dockerfile.prod` + `frontend/Caddyfile` — build SPA, serve it + `/api` proxy via Caddy.
-- `.env.prod.example` — every env var you must fill (copy to `.env` on the server).
+- `.env.example` — every env var you must fill (copy to `.env` on the server; one template for dev + prod).
 - `ai_providers.example.json` — copy to `ai_providers.json`, fill chat keys.
 
 ## Decisions (locked in)
@@ -79,7 +79,7 @@ git clone <your-repo> /opt/uski/USki && cd /opt/uski/USki
 
 ### 4. Env + secrets (on the server, as `uski`)
 ```bash
-cp .env.prod.example .env       # fill in all values
+cp .env.example .env       # fill in all values (use the PROD-ONLY section)
 chmod 600 .env
 cp ai_providers.example.json ai_providers.json   # fill real chat keys
 chmod 600 ai_providers.json
@@ -104,7 +104,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 ## Env vars (summary)
 
-See `.env.prod.example` for the full list with comments. The essentials:
+See `.env.example` for the full list with comments (PROD-ONLY section). The essentials:
 
 | Variable | Value |
 |----------|-------|
