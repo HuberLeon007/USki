@@ -4,11 +4,12 @@ import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 
 /**
- * Real APK URL, injected at build time via VITE_APK_URL (e.g. an EAS build
- * artifact link or a file served from /public). When unset, no download is
- * offered - we never serve the SPA's index.html disguised as an .apk.
+ * Real APK URL. Defaults to /uski.apk, which Caddy serves with the correct
+ * APK content-type (and a 404 - never the SPA index - when the file isn't
+ * present), so we never serve index.html disguised as an .apk. Override at
+ * build time with VITE_APK_URL (e.g. an external EAS artifact link).
  */
-const APK_URL = import.meta.env.VITE_APK_URL as string | undefined;
+const APK_URL = (import.meta.env.VITE_APK_URL as string | undefined) || "/uski.apk";
 
 /**
  * Mobile gateway. The desktop web app is not usable on phones, so phone visitors
