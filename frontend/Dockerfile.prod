@@ -1,0 +1,29 @@
+# Production web image: build the Vite SPA, then serve it (plus an /api proxy)
+# with Caddy. Build context is ./frontend.
+#
+# The Supabase URL + anon key + app mode are baked at build time because Vite
+# inlines them (`define` in vite.config.ts). The anon key is a PUBLIC key — safe
+# to ship in the client bundle. The service-role key is NEVER built in here.
+
+# ── Stage 1: build the static bundle ──────────────────────────────────────
+FROM node:22-slim AS build
+WORKDIR /app
+
+# Vite reads these from process.env at build time (loadEnv prefix "").
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+ARG VITE_APP_MODE=prod
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
+    VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY \
+    VITE_APP_MODE=$VITE_APP_MODE
+
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+# ── Stage 2: serve with Caddy ──────────────────────────────────────────────
+FROM caddy:2-alpine
+COPY --from=build /app/dist /srv
+COPY Caddyfile /etc/caddy/Caddyfile
+EXPOSE 80

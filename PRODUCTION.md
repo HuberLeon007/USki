@@ -1,210 +1,145 @@
-# USki — Production Deployment Plan
+# USki — Production Deployment (school server + Cloudflare Tunnel)
 
-Ziel: alles was wir jetzt haben (Web + Backend + Auth/DB + AI/RAG) in den
-**production mode** bringen, sodass es **von alleine läuft** und **jeder über
-eine öffentliche HTTPS-URL** darauf zugreifen kann.
+Goal: **huberleon.com reachable by anyone, from anywhere**, served from a
+school server that is itself only reachable internally / via Tailscale, for **0 €**.
 
-Kurzantwort auf "ist das möglich, läuft alles von alleine?": **Ja.** Mit
-managed Supabase Cloud + einem kleinen Server (docker compose mit
-`restart: unless-stopped`) + Caddy für automatisches HTTPS läuft der Stack
-dauerhaft selbstständig. Es ist überschaubar, aber ein paar Dinge sind aktuell
-nur für dev gebaut und müssen für prod ergänzt werden (siehe "Was fehlt noch").
-
-> Mobile (Expo/APK) ist hier NICHT teil von "jeder kann zugreifen im Browser".
-> Die App zeigt nur per Server-URL auf dasselbe prod-Backend. Separat behandelt.
-
----
-
-## 1. Architektur in prod
+## How it works
 
 ```
-                 https://uski.<deine-domain>
-                          │
-                    ┌─────▼─────┐   (Caddy: auto Let's Encrypt HTTPS,
-                    │   Caddy   │    single origin, reverse proxy)
-                    └──┬─────┬──┘
-        statische  ◄───┘     └───►  /api/*  →  Backend (uvicorn :8000)
-        Frontend-Build                         │
-        (vite build)                           ├─► Supabase Cloud (Auth + Postgres + pgvector + JWKS + OAuth)
-                                               ├─► Ollama (nur Embeddings, nomic-embed-text, 768d)
-                                               ├─► AI-Provider-Pool (Chat, round-robin: groq/gemini/openrouter)
-                                               ├─► Redis (Rate-Limiting)
-                                               └─► Resend (Transaktions-Mails)
+  anyone@internet ──https──> Cloudflare (TLS, DNS for huberleon.com)
+                                  │  (outbound-only tunnel, no port-forwarding)
+                              cloudflared  (runs on the school server)
+                                  │  http
+                              web  (Caddy :80)
+                                  ├── /        → built SPA (static)
+                                  └── /api/*   → backend (FastAPI :8000)
+                                                   ├── Ollama  (embeddings, 768d)
+                                                   ├── Redis   (rate limiting)
+                                                   └── Supabase Cloud (DB + Auth, EU)
 ```
 
-Wichtig: Frontend ruft `/api` **relativ** auf (`API_BASE = "/api"`). Darum in prod
-**ein Origin**: Caddy liefert das statische Frontend aus und proxied `/api` ans
-Backend. Kein CORS-Theater, kein absolutes API-URL nötig.
+The school server makes only an **outbound** connection to Cloudflare, so no
+public IP, no inbound firewall rule, and no port-forwarding is needed — it works
+behind the school NAT/firewall. Cloudflare terminates HTTPS; the app data lives
+in **Supabase Cloud (EU region)** so it survives server reboots and is backed up.
+
+> Requires school IT permission (public service over the school's connection).
+> Uptime depends on the school server staying on and the school's internet.
+
+## What's in the repo for this
+
+- `docker-compose.prod.yml` — the whole prod stack (backend, web, ollama, redis, cloudflared).
+- `backend/Dockerfile.prod` — FastAPI image (uvicorn, no reload, no source mount).
+- `frontend/Dockerfile.prod` + `frontend/Caddyfile` — build SPA, serve it + `/api` proxy via Caddy.
+- `.env.prod.example` — every env var you must fill (copy to `.env` on the server).
+- `ai_providers.example.json` — copy to `ai_providers.json`, fill chat keys.
+
+## Decisions (locked in)
+
+- **DB/Auth:** Supabase **Cloud**, EU region (not `supabase start` — that's dev-only, no backups).
+- **Embeddings:** local **Ollama** `nomic-embed-text` (768d) on the server → matches the `vector(768)` DB column, no migration, no paid embedding API.
+- **Chat:** external **provider pool** (`ai_providers.json`, e.g. groq/gemini free) — round-robin, already built.
+- **Public edge:** **Cloudflare Tunnel** (custom domain huberleon.com, free, auto-HTTPS).
 
 ---
 
-## 2. Hosting-Entscheidung (Empfehlung)
+## Step-by-step
 
-Für "läuft von alleine + jeder kann zugreifen + nicht zu kompliziert":
+### 0. School server — dedicated user
+```bash
+sudo adduser --system --group --shell /bin/bash --home /opt/uski uski
+sudo usermod -aG docker uski          # note: docker group ≈ root-equivalent
+sudo -iu uski
+git clone <your-repo> /opt/uski/USki && cd /opt/uski/USki
+```
 
-| Teil | Lösung | Warum |
-|------|--------|-------|
-| Auth + DB (+pgvector) | **Supabase Cloud** (Free-Tier reicht zum Start) | managed, JWKS/OAuth/SMTP fertig, kein DB-Betrieb nötig |
-| Backend + Ollama(Embeddings) + Redis + Caddy | **1 kleiner VPS** (z.B. Hetzner CX22, ~4 GB RAM) mit `docker compose` | ein `up -d`, restart-policy = selbstlaufend, billig |
-| Frontend | statischer Build, von **Caddy** auf demselben Server ausgeliefert | gleicher Origin → `/api` proxy ohne CORS |
-| Chat-LLM | **Provider-Pool** (groq/gemini/openrouter free keys) | kein eigenes GPU-Hosting nötig |
+### 1. Supabase Cloud
+1. Create a project in an **EU region** (e.g. Frankfurt). Enable the **pgvector** extension (Database → Extensions).
+2. Link + push the migrations:
+   ```bash
+   npx supabase link --project-ref YOUR-REF
+   npx supabase db push
+   ```
+   Confirm `document_chunk (vector(768))`, `match_document_chunks`, and all tables exist.
+3. Auth → URL Configuration: **Site URL** `https://huberleon.com`, add it to the redirect allow-list.
+4. Auth → Providers: enable Google/GitHub/Discord with real client id/secret + callback `https://YOUR-REF.supabase.co/auth/v1/callback`.
+5. Auth → SMTP: set custom SMTP (Resend) so OTP login mails aren't rate-limited.
+6. Copy the `anon` key + `service_role` key for the `.env`.
 
-Alternative (noch weniger Server-Pflege, aber zwei Origins + CORS + getrenntes
-Ollama-Hosting): Frontend auf Cloudflare Pages/Vercel, Backend auf Railway/Render,
-Embeddings über gehosteten Ollama. Mehr bewegliche Teile → nicht empfohlen für
-den ersten Schritt.
+### 2. Domain on Cloudflare
+1. Add `huberleon.com` to Cloudflare (free plan); switch the registrar's nameservers to Cloudflare's.
+2. Wait for the zone to go active.
 
----
+### 3. Cloudflare Tunnel
+1. Cloudflare **Zero Trust → Networks → Tunnels → Create a tunnel** (type: *Cloudflared*). Name it e.g. `uski`.
+2. Copy the **tunnel token** → put it in `.env` as `CLOUDFLARE_TUNNEL_TOKEN`.
+3. Add a **Public Hostname**: `huberleon.com` → service `http://web:80`
+   (cloudflared runs in the compose network, so it reaches the `web` container by name).
+   Optionally add `www.huberleon.com` the same way.
 
-## 3. KRITISCHE Knackpunkte (zuerst lesen)
+### 4. Env + secrets (on the server, as `uski`)
+```bash
+cp .env.prod.example .env       # fill in all values
+chmod 600 .env
+cp ai_providers.example.json ai_providers.json   # fill real chat keys
+chmod 600 ai_providers.json
+```
 
-1. **Embeddings laufen in prod weiter über Ollama.** Der Provider-Pool
-   (`ai_providers.json`) ist NUR für Chat (`next_chat_provider`). `OllamaEmbedder`
-   nutzt immer `AI_BASE_URL`. → In prod muss ein **Ollama mit `nomic-embed-text`
-   erreichbar sein** (im selben compose als Service, CPU reicht für das Embed-
-   Modell). Ohne das funktioniert RAG-Indexierung und -Suche nicht.
+### 5. Launch
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+- `ollama-init` pulls `nomic-embed-text` once (RAG embeddings).
+- `cloudflared` connects out to Cloudflare; huberleon.com goes live within seconds.
+- Everything has `restart: unless-stopped` → survives crashes and server reboots
+  (ensure the Docker daemon starts on boot: `sudo systemctl enable docker`).
 
-2. **Embedding-Dimension ist fix 768.** Die DB-Spalte ist `vector(768)` mit
-   HNSW-Index (`match_document_chunks`). Wenn du je das Embed-Modell wechselst,
-   muss es 768d liefern ODER Migration + Neu-Embedding aller Karten. → Am
-   einfachsten: bei `nomic-embed-text` (768d) bleiben, dann keine Code/DB-Änderung.
-
-3. **Die aktuellen Dockerfiles sind dev-only.**
-   - `backend/Dockerfile`: startet uvicorn mit `--reload` und compose mountet
-     `./backend/src` als Volume. → prod: kein `--reload`, kein Source-Mount,
-     fixe Worker.
-   - `frontend/Dockerfile`: startet den **Vite Dev-Server** (`npm run dev`). →
-     prod: `vite build` (multi-stage) und statisch ausliefern.
-   → Es braucht prod-Varianten (siehe Abschnitt 6).
-
-4. **Auth-E-Mails (OTP) kommen von Supabase, nicht von Resend.** OTP-Login ist der
-   Haupt-Login. Supabase Cloud Default-SMTP hat **strenge Limits** (paar Mails/h)
-   → für echten Betrieb **Custom SMTP in Supabase** konfigurieren (z.B. Resend
-   SMTP). Resend im Backend ist nur für Welcome/Login-Alerts.
-
-5. **WebAuthn/Passkeys brauchen die echte Domain.** `WEBAUTHN_RP_ID` =
-   registrierbare Domain (ohne Schema/Port), `WEBAUTHN_ORIGINS` = volle prod-URL.
-   Sonst schlagen Passkeys fehl.
-
-6. **`/api/dev/wipe` (DB-Wipe) und der mock-social Pfad** sind dev-Features.
-   Sicherstellen: in prod (`APP_MODE=prod`) ist der Dev-Wipe deaktiviert/404 und
-   der Social-Mock aus dem Build entfernt. → vor Go-Live verifizieren.
-
----
-
-## 4. Was `APP_MODE=prod` automatisch umschaltet (schon gebaut)
-
-- **Social-Login**: echtes Google/GitHub/Discord OAuth über Supabase statt
-  Offline-Mock. Der Mock-Adapter wird aus dem prod-Build entfernt.
-- **Chat-AI**: round-robin über den Provider-Pool (`AI_PROVIDERS_FILE`), Fallback
-  auf `AI_BASE_URL`/`AI_MODEL` wenn kein Pool gesetzt.
-- Backend `is_dev` Flag steuert weitere Pfade (z.B. dev-Wipe, single-Ollama Chat).
-
-Das meiste prod-Verhalten hängt also nur an korrekten **env-Werten** + dem
-Provider-Pool-File. Der Code ist dafür schon vorbereitet.
+### 6. Verify (test end-to-end)
+- Open `https://huberleon.com` from a phone on mobile data (off the school network).
+- Sign up via email OTP (mail arrives?), social login, add a passkey, create a deck + cards.
+- Ask Sero with a deck open → answer uses card content (embeddings + chat both work).
+- `https://huberleon.com/api/health` → 200.
 
 ---
 
-## 5. Schritt-für-Schritt
+## Env vars (summary)
 
-### Phase A — Supabase Cloud
-1. Projekt in Supabase Cloud anlegen. Region nah wählen.
-2. `pgvector` Extension aktivieren (Dashboard → Database → Extensions).
-3. Migrations anwenden: lokales Projekt linken und pushen
-   (`supabase link --project-ref <ref>` → `supabase db push`). Prüfen, dass
-   `document_chunk (vector(768))` + `match_document_chunks` + alle Tabellen da sind.
-4. **Auth → URL Configuration**: Site URL = `https://uski.<domain>`, Redirect-
-   Allowlist ergänzen.
-5. **Auth → Providers**: Google/GitHub/Discord mit echten Client-ID/Secret +
-   Callback-URLs (`https://<ref>.supabase.co/auth/v1/callback`) aktivieren.
-6. **Auth → SMTP**: Custom SMTP (z.B. Resend) eintragen (wegen OTP-Limits).
-7. Keys notieren: `SUPABASE_URL` (https://<ref>.supabase.co), `ANON_KEY`,
-   `SERVICE_ROLE_KEY`.
+See `.env.prod.example` for the full list with comments. The essentials:
 
-### Phase B — AI
-8. `ai_providers.json` aus `ai_providers.example.json` erstellen, echte Keys
-   (groq/gemini/openrouter free) eintragen. **Nicht committen** (gitignore prüfen).
-9. Embeddings: Ollama-Service in prod-compose aufnehmen, beim Start
-   `nomic-embed-text` pullen. `AI_BASE_URL` des Backends → dieser Ollama.
-
-### Phase C — Server + Deploy
-10. VPS mit Docker + docker compose. Domain-A-Record → Server-IP.
-11. `docker-compose.prod.yml` + `Caddyfile` + prod-Dockerfiles anlegen (Abschnitt 6).
-12. `.env` (prod) mit allen Werten aus Abschnitt 7 befüllen (auf dem Server, nicht im Repo).
-13. `docker compose -f docker-compose.prod.yml up -d --build`.
-14. Caddy holt automatisch HTTPS-Zertifikat. Healthcheck: `GET /api/health` = 200.
-
-### Phase D — Verifikation (ich teste, du nicht)
-15. Registrierung per E-Mail-OTP (echte Mail kommt an?), Social-Login, Passkey
-    anlegen/login, Deck+Karten anlegen, Sero/Chat (Chat-Provider antwortet),
-    RAG (Antwort nutzt Karteninhalt → Embeddings laufen), Rate-Limit greift.
-16. Bestätigen: Dev-Wipe ist in prod nicht erreichbar; Mock-Social nicht im Build.
-
----
-
-## 6. Was fehlt noch (neue Dateien, die ich anlegen würde)
-
-Diese existieren noch NICHT und sind für prod nötig:
-
-- `backend/Dockerfile.prod` — uvicorn ohne `--reload`, mehrere Worker, kein
-  Source-Mount. (Oder ein `--target prod` Stage im bestehenden Dockerfile.)
-- `frontend/Dockerfile.prod` — multi-stage: `npm ci && vite build` → Build in ein
-  schlankes nginx/Caddy-Image, statisch ausliefern.
-- `docker-compose.prod.yml` — services: `caddy`, `backend` (prod image, kein
-  Volume-Mount, `restart: unless-stopped`, env_file `.env`), `ollama` (für
-  Embeddings, persistentes Volume, restart), `ollama-init` (pullt
-  `nomic-embed-text`), `redis` (persistent, restart). KEIN frontend-dev-server.
-- `Caddyfile` — `uski.<domain> { root static-build; try_files; reverse_proxy /api/* backend:8000 }`,
-  auto-HTTPS.
-- (optional) `.github/workflows/deploy.yml` — bei push auf `main`: build + per SSH
-  `docker compose pull && up -d` auf dem VPS → echtes Continuous Deployment.
-
----
-
-## 7. Env-Variablen prod (Übersicht)
-
-| Variable | prod-Wert / Quelle |
-|----------|--------------------|
+| Variable | Value |
+|----------|-------|
 | `APP_MODE` | `prod` |
-| `SUPABASE_URL` | `https://<ref>.supabase.co` |
-| `SUPABASE_PUBLIC_URL` | leer (gleich wie SUPABASE_URL, ein Origin) |
-| `SUPABASE_ANON_KEY` | Supabase Cloud Dashboard |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase Cloud Dashboard (geheim!) |
-| `BACKEND_CORS_ORIGINS` | `https://uski.<domain>` |
-| `AI_BASE_URL` | `http://ollama:11434/v1` (für Embeddings) |
-| `AI_EMBED_MODEL` | `nomic-embed-text` (768d, nicht ändern) |
-| `AI_PROVIDERS_FILE` | `ai_providers.json` (Chat-Pool) |
-| `RATE_LIMIT_REDIS_URL` | `redis://redis:6379` |
-| `RESEND_API_KEY` | Resend (Transaktionsmails) |
-| `EMAIL_FROM` | verifizierter Resend-Sender |
-| `WEBAUTHN_RP_ID` | `uski.<domain>` (ohne Schema/Port) |
-| `WEBAUTHN_RP_NAME` | `USki` |
-| `WEBAUTHN_ORIGINS` | `https://uski.<domain>` |
-| Frontend build | `VITE_APP_MODE=prod`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` |
+| `SUPABASE_URL` / `SUPABASE_PUBLIC_URL` | `https://YOUR-REF.supabase.co` |
+| `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` | from Supabase dashboard |
+| `AI_EMBED_MODEL` | `nomic-embed-text` (768d — don't change) |
+| `AI_PROVIDERS_FILE` | `ai_providers.json` (chat pool, REQUIRED) |
+| `RESEND_API_KEY` / `EMAIL_FROM` | Resend + verified `huberleon.com` sender |
+| `WEBAUTHN_RP_ID` | `huberleon.com` |
+| `WEBAUTHN_ORIGINS` | `https://huberleon.com` |
+| `CLOUDFLARE_TUNNEL_TOKEN` | from the Zero Trust tunnel |
 
-Secrets (`SERVICE_ROLE_KEY`, `ai_providers.json`, `RESEND_API_KEY`) leben NUR auf
-dem Server / in CI-Secrets, niemals im Repo.
+Secrets (`SUPABASE_SERVICE_ROLE_KEY`, `ai_providers.json`, `RESEND_API_KEY`,
+`CLOUDFLARE_TUNNEL_TOKEN`) live only on the server / in the gitignored files.
 
 ---
 
-## 8. "Läuft von alleine" — wie sichergestellt
+## Updating after a code change
+```bash
+sudo -iu uski && cd /opt/uski/USki
+git pull
+docker compose -f docker-compose.prod.yml up -d --build
+```
 
-- `restart: unless-stopped` auf allen prod-Services → Auto-Neustart nach Crash/Reboot.
-- Caddy = automatisches HTTPS + Auto-Renewal der Zertifikate.
-- Supabase Cloud = managed (kein DB-Babysitting).
-- Ollama-Modell + Redis auf persistenten Volumes → übersteht Neustart.
-- `GET /api/health` für Uptime-Monitoring (z.B. UptimeRobot) anschließbar.
-- Optional CI/CD: push auf `main` → automatisches Redeploy.
-
----
-
-## 9. Entscheidungen, die DU treffen musst (bevor ich Dateien baue)
-
-1. **Domain** für prod (z.B. `uski.huberleon.com`)?
-2. **Hosting**: VPS + compose (empfohlen) oder Plattform (Railway/Render + Pages)?
-3. **Supabase**: Cloud (empfohlen) oder Self-host?
-4. **Chat-Provider**: welche free-tier keys hast du (groq/gemini/openrouter)?
-5. **Mail**: Resend-Domain verifizierbar (für OTP-SMTP + Transaktionsmails)?
-
-Sobald das steht, lege ich die prod-Dateien aus Abschnitt 6 an und wir testen
-Phase D durch.
+## Caveats / honest notes
+- **Uptime = school server uptime.** If it's powered off (night/holidays) or the
+  school network blocks outbound, the site is down. For true 24/7 you'd need an
+  always-on host.
+- **Chat needs `ai_providers.json`.** Only the embedding model is pulled locally;
+  chat is served by the external free provider pool. No pool → no chat replies.
+- **Resend free** = 100 mails/day. Fine for a class; verify `huberleon.com` first.
+- **Security:** it's a public app on a school machine — keep `.env` at `chmod 600`,
+  don't expose Caddy's :80 to the public directly (only cloudflared talks to it),
+  and run the stack as the non-root `uski` user.
+- **Cloud alternative (plan B, no school server):** Render (backend, cold-starts)
+  + Cloudflare Pages (frontend) + Supabase Cloud + swap embeddings to Gemini
+  `text-embedding-004` (768d). Use only if the school server path falls through.

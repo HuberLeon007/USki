@@ -1,0 +1,98 @@
+# Production stack for the school server, fronted by Cloudflare Tunnel.
+#
+#   huberleon.com → Cloudflare → cloudflared → web (Caddy :80)
+#                                                 ├── /        → SPA (static)
+#                                                 └── /api/*   → backend :8000
+#   backend → Ollama (embeddings, 768d) + Supabase Cloud (DB/Auth) + Redis
+#
+# Start (as the `uski` user):  docker compose -f docker-compose.prod.yml up -d --build
+# Secrets live in ./.env (chmod 600) and ./ai_providers.json — never committed.
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    env_file:
+      - .env
+    environment:
+      # Embeddings run on the local Ollama (sibling service), 768-dim model.
+      - AI_BASE_URL=http://ollama:11434/v1
+      - AI_EMBED_MODEL=${AI_EMBED_MODEL:-nomic-embed-text}
+      # Rate-limit store on the sibling Redis.
+      - RATE_LIMIT_REDIS_URL=redis://redis:6379
+    expose:
+      - "8000"
+    depends_on:
+      - redis
+      - ollama
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        # Browser-facing Supabase values (public). Baked into the bundle.
+        VITE_SUPABASE_URL: ${SUPABASE_PUBLIC_URL}
+        VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+        VITE_APP_MODE: prod
+    expose:
+      - "80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      # Embeddings are light; keep the model resident, modest parallelism.
+      - OLLAMA_KEEP_ALIVE=-1
+      - OLLAMA_NUM_PARALLEL=2
+    restart: unless-stopped
+
+  # One-shot: pull the embedding model so RAG works after a fresh `up`. Chat is
+  # served by the external provider pool (ai_providers.json), so NO chat model
+  # is pulled here. Exits when done; models persist in ollama_data.
+  ollama-init:
+    image: ollama/ollama:latest
+    depends_on:
+      - ollama
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - AI_EMBED_MODEL=${AI_EMBED_MODEL:-nomic-embed-text}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        echo "waiting for ollama..."
+        until ollama list >/dev/null 2>&1; do sleep 2; done
+        echo "pulling embedding model: $${AI_EMBED_MODEL}"
+        ollama pull "$${AI_EMBED_MODEL}"
+        echo "embedding model ready"
+    restart: "no"
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+
+  # Cloudflare Tunnel: outbound-only connection to Cloudflare. The public
+  # hostname → service mapping (huberleon.com → http://web:80) is configured in
+  # the Cloudflare Zero Trust dashboard for this token's tunnel.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - web
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
+  redis_data:

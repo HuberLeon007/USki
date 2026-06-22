@@ -1,0 +1,21 @@
+# Caddy serves the built SPA and proxies the API to the backend, all on one
+# origin (so the frontend's relative `/api` calls work with no CORS).
+#
+# TLS is terminated by Cloudflare (the public huberleon.com cert lives there);
+# cloudflared connects to this container over plain HTTP, so Caddy only listens
+# on :80 here. Do NOT expose this port to the public internet directly.
+:80 {
+	encode gzip zstd
+
+	# API → FastAPI backend (same compose network).
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	# Everything else → the static SPA, with history-API fallback.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}
