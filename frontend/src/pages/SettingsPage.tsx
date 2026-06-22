@@ -49,7 +49,7 @@ import {
   type TotpStatus,
   type TotpSetup,
 } from "@/lib/api";
-import QRCode from "qrcode";
+import QRCode from "react-qr-code";
 import { cn } from "@/lib/utils";
 
 /** The settings sections, rendered as a left rail (desktop) / top row (mobile). */
@@ -482,7 +482,6 @@ function AssistantPanel() {
 function SecurityPanel({ endSession }: { endSession: () => void }) {
   const [status, setStatus] = useState<TotpStatus | null>(null);
   const [setup, setSetup] = useState<TotpSetup | null>(null);
-  const [qr, setQr] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [disarm, setDisarm] = useState(false); // showing the disable code field
   const [busy, setBusy] = useState(false);
@@ -504,7 +503,6 @@ function SecurityPanel({ endSession }: { endSession: () => void }) {
     try {
       const s = await setupTotp();
       setSetup(s);
-      setQr(await QRCode.toDataURL(s.otpauth_uri, { width: 220, margin: 1 }));
     } catch (err) {
       if (err instanceof SessionExpiredError) { endSession(); return; }
       setError("Could not start setup. Please try again.");
@@ -518,7 +516,7 @@ function SecurityPanel({ endSession }: { endSession: () => void }) {
     setBusy(true); setError(null);
     try {
       const s = await verifyTotp(code.trim());
-      setStatus(s); setSetup(null); setQr(null); setCode("");
+      setStatus(s); setSetup(null); setCode("");
     } catch (err) {
       if (err instanceof SessionExpiredError) { endSession(); return; }
       setError("That code didn't match. Enter the current one from your app.");
@@ -598,7 +596,9 @@ function SecurityPanel({ endSession }: { endSession: () => void }) {
             Scan this with your authenticator app, then enter the 6-digit code it shows.
           </p>
           <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-start">
-            {qr && <img src={qr} alt="Authenticator setup QR code" width={180} height={180} className="rounded-lg border border-border/40 bg-white p-2" />}
+            <div className="rounded-lg border border-border/40 bg-white p-3">
+              <QRCode value={setup.otpauth_uri} size={160} />
+            </div>
             <div className="min-w-0 flex-1 space-y-2">
               <p className="text-xs text-muted-foreground">Can't scan? Enter this key manually:</p>
               <code className="block break-all rounded-lg bg-muted px-3 py-2 text-xs">{setup.secret}</code>
@@ -618,7 +618,7 @@ function SecurityPanel({ endSession }: { endSession: () => void }) {
               </div>
             </div>
           </div>
-          <Button variant="ghost" className="h-9 rounded-lg" disabled={busy} onClick={() => { setSetup(null); setQr(null); setCode(""); setError(null); }}>
+          <Button variant="ghost" className="h-9 rounded-lg" disabled={busy} onClick={() => { setSetup(null); setCode(""); setError(null); }}>
             Cancel
           </Button>
         </div>
