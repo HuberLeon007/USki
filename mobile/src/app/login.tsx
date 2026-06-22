@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ApiError, sendOtp, verifyOtp, verifyTwoFactorChallenge } from "@/lib/api";
+import { signInWithProvider, supabaseConfigured, type Provider } from "@/lib/social";
 import { useAuth } from "@/lib/auth";
 import { ServerSettings } from "@/components/server-settings";
 import { Colors } from "@/constants/theme";
@@ -38,10 +39,29 @@ export default function LoginScreen() {
   const [code, setCode] = useState("");
   const [challenge, setChallenge] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [socialBusy, setSocialBusy] = useState<Provider | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showServer, setShowServer] = useState(false);
 
   if (authenticated) return <Redirect href="/" />;
+
+  async function onSocial(provider: Provider) {
+    setSocialBusy(provider);
+    setError(null);
+    try {
+      const r = await signInWithProvider(provider);
+      if (r.ok) {
+        await signIn(r.access_token, r.refresh_token);
+        router.replace("/");
+        return;
+      }
+      if (!r.cancelled) setError(r.error ?? "Sign-in failed. Try again.");
+    } catch {
+      setError("Sign-in failed. Try again.");
+    } finally {
+      setSocialBusy(null);
+    }
+  }
 
   async function submitEmail() {
     const value = email.trim().toLowerCase();
@@ -207,6 +227,41 @@ export default function LoginScreen() {
             </Pressable>
           )}
 
+          {step === "email" && supabaseConfigured && (
+            <View style={styles.socialWrap}>
+              <View style={styles.dividerRow}>
+                <View style={[styles.divider, { backgroundColor: c.backgroundSelected }]} />
+                <Text style={[styles.dividerText, { color: c.textSecondary }]}>or continue with</Text>
+                <View style={[styles.divider, { backgroundColor: c.backgroundSelected }]} />
+              </View>
+              {(["google", "github", "discord"] as Provider[]).map((p) => (
+                <Pressable
+                  key={p}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Continue with ${p}`}
+                  disabled={socialBusy !== null}
+                  onPress={() => onSocial(p)}
+                  style={({ pressed }) => [
+                    styles.socialBtn,
+                    {
+                      borderColor: c.backgroundSelected,
+                      backgroundColor: c.backgroundElement,
+                      opacity: socialBusy && socialBusy !== p ? 0.5 : pressed ? 0.8 : 1,
+                    },
+                  ]}
+                >
+                  {socialBusy === p ? (
+                    <ActivityIndicator color={c.text} />
+                  ) : (
+                    <Text style={[styles.socialText, { color: c.text }]}>
+                      Continue with {p.charAt(0).toUpperCase() + p.slice(1)}
+                    </Text>
+                  )}
+                </Pressable>
+              ))}
+            </View>
+          )}
+
           <Pressable
             accessibilityRole="button"
             onPress={() => setShowServer((v) => !v)}
@@ -251,4 +306,17 @@ const styles = StyleSheet.create({
   buttonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   linkButton: { alignItems: "center", paddingVertical: 8 },
   linkText: { fontSize: 14, fontWeight: "500" },
+  socialWrap: { gap: 10, marginTop: 4 },
+  dividerRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  divider: { flex: 1, height: StyleSheet.hairlineWidth },
+  dividerText: { fontSize: 12, fontWeight: "600" },
+  socialBtn: {
+    height: 50,
+    borderWidth: 1,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderCurve: "continuous",
+  },
+  socialText: { fontSize: 15, fontWeight: "600" },
 });
