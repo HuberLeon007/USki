@@ -13,9 +13,17 @@ That is why production users receive a clickable link instead of the 6-digit cod
 The fix is to set the Cloud email templates to the same code-only body as `otp.html`. No backend
 code changes — `POST /api/auth/send-otp` and `/verify-otp` stay exactly as they are.
 
-## Which templates to change
+## Set the OTP length to 6 digits (important)
 
-`supabase.auth.sign_in_with_otp()` triggers the **Magic Link** template for an existing user and
+The app's verifier accepts **exactly 6 digits** (`^\d{6}$`). If Supabase is configured to
+send 8-digit codes, sign-in will fail. Set the code length to 6:
+
+- **Dashboard:** Authentication → **Sign In / Providers** → **Email** → set **Email OTP Length**
+  to `6` → Save. (OTP Expiry can stay at 3600s.)
+- **Local CLI:** already set in `supabase/config.toml` → `[auth.email] otp_length = 6`.
+- **Management API:** `mailer_otp_length: 6` on `PATCH /v1/projects/{ref}/config/auth`.
+
+## Which templates to change`supabase.auth.sign_in_with_otp()` triggers the **Magic Link** template for an existing user and
 the **Confirm signup** template for a brand-new email. To guarantee no path ever sends a link,
 set all of these to the code-only body:
 

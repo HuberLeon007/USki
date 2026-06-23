@@ -44,6 +44,9 @@ enable_anonymous_sign_ins = false
 enable_signup = true
 double_confirm_changes = true
 enable_confirmations = true
+# 6-digit one-time codes (not 8). Must match the backend validator (^\d{6}$).
+otp_length = 6
+otp_expiry = 3600
 
 # Code-only emails: every auth mail shows ONLY the 6-digit {{ .Token }},
 # no magic link, no "Confirm your email" copy.
