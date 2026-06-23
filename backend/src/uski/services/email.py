@@ -37,9 +37,11 @@ class EmailMessage:
 
 # ── templates (pure) ─────────────────────────────────────────
 # Dark, table-based, email-client-safe shell mirroring supabase/templates/otp.html:
-# dark page (#0b0b0f), centered card (#15151c / #26262f), USki text wordmark with the
-# purple "US" accent (#7c5cff). All styles inline; no external image so it always renders.
+# dark page (#0b0b0f), centered card (#15151c / #26262f), USki logo + text wordmark with
+# the purple "US" accent (#7c5cff). The logo is a publicly-hosted PNG; the text wordmark
+# stays as a graceful fallback if the image is blocked by the mail client.
 _FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+_LOGO_URL = "https://uski.huberleon.com/logo.png"
 
 
 def _shell(subtitle: str, body_html: str) -> str:
@@ -50,7 +52,12 @@ def _shell(subtitle: str, body_html: str) -> str:
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
         'style="max-width:480px;background:#15151c;border:1px solid #26262f;border-radius:16px;'
         'padding:36px 32px;">'
-        # Wordmark
+        # Logo
+        '<tr><td align="center" style="padding-bottom:12px;">'
+        f'<img src="{_LOGO_URL}" alt="USki" width="56" '
+        'style="display:block;width:56px;height:auto;border:0;outline:none;text-decoration:none;border-radius:12px;" />'
+        "</td></tr>"
+        # Wordmark (fallback / product name)
         '<tr><td align="center" style="padding-bottom:6px;font-size:24px;font-weight:700;'
         'letter-spacing:-0.02em;">'
         '<span style="color:#7c5cff;">US</span><span style="color:#ffffff;">ki</span>'
