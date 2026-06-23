@@ -5,20 +5,25 @@ import { toCanonicalSession, type CanonicalSessionLike } from "./types";
 /**
  * Property test for canonical session indistinguishability (social-login).
  *
- * Generated payloads carry the five canonical fields plus arbitrary extra
- * fields and an explicit `origin` marker ("otp" | "supabase" | "mock"). After
- * mapping through `toCanonicalSession`, the result has exactly the five
- * canonical keys, drops every extra (including the origin marker), and is equal
- * for two inputs that share the canonical fields but differ in origin. Nothing
- * downstream can therefore tell a social/mock session apart from an OTP session.
+ * Generated payloads carry the canonical fields plus arbitrary extra fields and
+ * an explicit `origin` marker ("otp" | "supabase" | "mock"). After mapping
+ * through `toCanonicalSession`, the result has exactly the canonical keys
+ * (the five session fields plus the two optional TOTP-gating fields,
+ * `two_factor_required` and `challenge`, which are part of the OTP-identical
+ * `AuthResponse` shape), drops every extra (including the origin marker), and is
+ * equal for two inputs that share the canonical fields but differ in origin.
+ * Nothing downstream can therefore tell a social/mock session apart from an OTP
+ * session.
  */
 // Feature: social-login, Property 1: Canonical session indistinguishability
 describe("Property 1: Canonical session indistinguishability", () => {
   const CANONICAL_KEYS = [
     "access_token",
+    "challenge",
     "email",
     "needs_username",
     "refresh_token",
+    "two_factor_required",
     "user_id",
   ] as const;
 
@@ -28,6 +33,8 @@ describe("Property 1: Canonical session indistinguishability", () => {
     user_id: fc.string(),
     email: fc.option(fc.string(), { nil: null }),
     needs_username: fc.boolean(),
+    two_factor_required: fc.boolean(),
+    challenge: fc.option(fc.string(), { nil: null }),
   });
 
   const originArb = fc.constantFrom("otp", "supabase", "mock");
@@ -43,7 +50,7 @@ describe("Property 1: Canonical session indistinguishability", () => {
         const input = { ...extra, origin, ...base };
         const result = toCanonicalSession(input as CanonicalSessionLike);
 
-        // Exactly the five canonical keys, nothing else.
+        // Exactly the canonical keys, nothing else.
         expect(Object.keys(result).sort()).toEqual([...CANONICAL_KEYS]);
         // The canonical values survive untouched.
         expect(result).toEqual(base);

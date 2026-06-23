@@ -7,37 +7,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { SelectMenu } from "@/components/ui/select-menu";
+import { copyToClipboard } from "@/lib/clipboard";
 import {
   createInvite, grantShare, listShares, revokeShare,
   type Permission, type Share,
 } from "@/lib/api";
-
-/** Copy text to the clipboard, with a fallback for non-secure contexts /
- *  browsers where the async Clipboard API is unavailable. Returns success. */
-async function copyToClipboard(text: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch { /* fall through to legacy path */ }
-  try {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.setAttribute("readonly", "");
-    ta.style.position = "fixed";
-    ta.style.top = "-1000px";
-    ta.style.opacity = "0";
-    document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
-    const ok = document.execCommand("copy");
-    document.body.removeChild(ta);
-    return ok;
-  } catch {
-    return false;
-  }
-}
 
 interface Props {
   open: boolean;
@@ -55,6 +29,7 @@ export function ShareDialog({ open, onOpenChange, deckId }: Props) {
   const [copiedLink, setCopiedLink] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [revoking, setRevoking] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -87,9 +62,23 @@ export function ShareDialog({ open, onOpenChange, deckId }: Props) {
     }
   }
 
-  async function revoke(granteeId: string) {
-    await revokeShare(deckId, granteeId);
-    setShares(await listShares(deckId));
+  function askRevoke(granteeId: string) {
+    toast("Remove this person's access to the deck?", {
+      action: { label: "Remove", onClick: () => doRevoke(granteeId) },
+    });
+  }
+
+  async function doRevoke(granteeId: string) {
+    setRevoking(granteeId);
+    try {
+      await revokeShare(deckId, granteeId);
+      setShares(await listShares(deckId));
+      toast.success("Access removed");
+    } catch {
+      toast.error("Couldn't remove access. Please try again.");
+    } finally {
+      setRevoking(null);
+    }
   }
 
   async function makeLink() {
@@ -229,8 +218,13 @@ export function ShareDialog({ open, onOpenChange, deckId }: Props) {
               <div key={s.grantee_id} className="flex items-center justify-between rounded-lg px-2 py-1.5 text-sm">
                 <span className="font-mono text-xs">{s.grantee_id.slice(0, 8)}…</span>
                 <span className="text-muted-foreground">{s.permission}</span>
-                <button onClick={() => revoke(s.grantee_id)} aria-label="Revoke" className="text-destructive">
-                  <Trash2 className="h-4 w-4" />
+                <button
+                  onClick={() => askRevoke(s.grantee_id)}
+                  aria-label="Revoke"
+                  disabled={revoking === s.grantee_id}
+                  className="text-destructive disabled:opacity-50"
+                >
+                  {revoking === s.grantee_id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                 </button>
               </div>
             ))

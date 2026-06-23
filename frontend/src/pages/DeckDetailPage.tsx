@@ -109,6 +109,7 @@ export default function DeckDetailPage() {
   const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; notes: number } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [grouping, setGrouping] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   function loadStats() { reviewStats(deckId).then(setStats).catch(() => {}); }
 
@@ -310,13 +311,26 @@ export default function DeckDetailPage() {
     setPendingDelete({ ids, notes: selected.size });
   }
 
-  async function bulkReset() {
+  function bulkReset() {
     const ids = selectedIds();
     if (!ids.length) return;
-    await resetProgress(deckId, ids);
-    setSelected(new Set());
-    loadStats();
-    toast.success("Learning progress reset.");
+    toast("Reset learning progress for the selected cards? This can't be undone.", {
+      action: { label: "Reset", onClick: () => runBulkReset(ids) },
+    });
+  }
+
+  async function runBulkReset(ids: string[]) {
+    setResetting(true);
+    try {
+      await resetProgress(deckId, ids);
+      setSelected(new Set());
+      loadStats();
+      toast.success("Learning progress reset.");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not reset progress. Please try again.");
+    } finally {
+      setResetting(false);
+    }
   }
 
   function toggleSelectAll() {
@@ -487,7 +501,9 @@ export default function DeckDetailPage() {
                 ) : (
                   <>
                     <Button size="sm" variant="outline" className="h-8 gap-1.5 rounded-lg" onClick={() => setBulkOpen(true)}>Group…</Button>
-                    <Button size="sm" variant="outline" className="h-8 rounded-lg" onClick={bulkReset}>Reset progress</Button>
+                    <Button size="sm" variant="outline" className="h-8 gap-1.5 rounded-lg" onClick={bulkReset} disabled={resetting}>
+                      {resetting && <Loader2 className="h-4 w-4 animate-spin" />} Reset progress
+                    </Button>
                     <Button size="sm" variant="ghost" className="h-8 gap-1.5 rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={bulkDelete}>
                       <Trash2 className="h-4 w-4" /> Delete
                     </Button>

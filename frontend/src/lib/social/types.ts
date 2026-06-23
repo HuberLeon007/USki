@@ -121,11 +121,13 @@ export type CanonicalSessionLike = {
 };
 
 /**
- * Project any canonical-session-shaped input down to exactly the five canonical
+ * Project any canonical-session-shaped input down to exactly the canonical
  * fields, dropping anything else. This is the shared mapper every adapter and
  * callback path uses so the installed value is byte-for-byte the same regardless
  * of origin (OTP, real social, or mock) -- the basis of canonical-session
- * indistinguishability (Requirement 2.3, 5.3, 8.4).
+ * indistinguishability (Requirement 2.3, 5.3, 8.4). The two optional TOTP-gating
+ * fields (`two_factor_required`, `challenge`) are part of the OTP-identical
+ * `AuthResponse` shape and so are carried through here as well.
  */
 export function toCanonicalSession(input: CanonicalSessionLike): CanonicalSession {
   return {

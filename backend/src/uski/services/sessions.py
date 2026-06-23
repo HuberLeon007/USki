@@ -137,26 +137,27 @@ def location_label(geo: "Geo | None", ip: str | None) -> str:
 def geolocate(ip: str | None) -> Geo | None:
     """Best-effort IP geolocation; returns None for private/local IPs.
 
-    Uses the free ip-api.com endpoint with a short timeout. Any failure (no
-    network, rate limit, unexpected payload) degrades to None so login is never
-    blocked or slowed meaningfully. In dev the client IP is loopback, so this
-    returns None and the UI shows a "local network" placeholder.
+    Uses the free **HTTPS** ipwho.is endpoint with a short timeout. Any failure
+    (no network, rate limit, unexpected payload) degrades to None so login is
+    never blocked or slowed meaningfully. In dev the client IP is loopback, so
+    this returns None and the UI shows a "local network" placeholder.
     """
     if is_private_ip(ip):
         return None
     try:
         resp = requests.get(
-            f"http://ip-api.com/json/{ip}?fields=status,city,country,lat,lon",
+            f"https://ipwho.is/{ip}",
+            params={"fields": "success,city,country,latitude,longitude"},
             timeout=2.5,
         )
         data = resp.json()
-        if data.get("status") != "success":
+        if not data.get("success"):
             return None
         return Geo(
             city=data.get("city"),
             country=data.get("country"),
-            lat=data.get("lat"),
-            lon=data.get("lon"),
+            lat=data.get("latitude"),
+            lon=data.get("longitude"),
         )
     except Exception as exc:  # noqa: BLE001 - geo is best-effort, never fatal
         logger.debug("geolocate failed for {}: {}", ip, exc)

@@ -21,10 +21,15 @@ import {
   KeyRound,
   Plus,
   Trash2,
+  Maximize2,
   Loader2 as Spinner,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { SessionMap } from "@/components/settings/SessionMap";
+import { ipVersionLabel } from "@/lib/clipboard";
 import { useAuth } from "@/app/auth-context";
 import { isAiEnabled, setAiEnabled } from "@/lib/ai-pref";
 import {
@@ -655,8 +660,21 @@ function timeAgo(iso: string | null): string {
 
 /** One device row: device, location, last active, optional map, sign-out. */
 function SessionRow({ s, busy, onSignOut }: { s: SessionInfo; busy: boolean; onSignOut: () => void }) {
+  const [expanded, setExpanded] = useState(false);
   const location = s.city && s.country ? `${s.city}, ${s.country}` : s.country || (s.ip ? "Unknown location" : "Local network");
   const hasGeo = s.lat != null && s.lon != null;
+  const ipv = ipVersionLabel(s.ip);
+  const device = s.device ?? "Unknown device";
+
+  const popupHtml = hasGeo
+    ? `<div style="font-family:system-ui,Segoe UI,Roboto,sans-serif;font-size:12px;line-height:1.6;min-width:170px">
+         <strong>${escapeHtml(device)}</strong><br/>
+         ${escapeHtml(location)}<br/>
+         ${ipv ? `${ipv}: <code>${escapeHtml(s.ip ?? "")}</code><br/>` : ""}
+         <span style="color:#6b7280">${(s.lat as number).toFixed(4)}, ${(s.lon as number).toFixed(4)}</span>
+       </div>`
+    : undefined;
+
   return (
     <div className="rounded-xl border border-border/50 bg-background/40 p-4">
       <div className="flex items-start justify-between gap-3">
@@ -666,7 +684,7 @@ function SessionRow({ s, busy, onSignOut }: { s: SessionInfo; busy: boolean; onS
           </span>
           <div className="min-w-0">
             <p className="flex items-center gap-2 text-sm font-medium">
-              {s.device ?? "Unknown device"}
+              {device}
               {s.current && (
                 <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-500">
                   This device
@@ -676,7 +694,7 @@ function SessionRow({ s, busy, onSignOut }: { s: SessionInfo; busy: boolean; onS
             <p className="mt-0.5 flex items-center gap-1.5 text-sm text-muted-foreground">
               <MapPin className="h-3.5 w-3.5 shrink-0" />
               {location}
-              {s.ip ? ` · ${s.ip}` : ""}
+              {s.ip ? ` · ${ipv}: ${s.ip}` : ""}
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">Last active {timeAgo(s.last_seen_at)}</p>
           </div>
@@ -693,28 +711,67 @@ function SessionRow({ s, busy, onSignOut }: { s: SessionInfo; busy: boolean; onS
           </Button>
         )}
       </div>
+
       {hasGeo ? (
-        <iframe
-          title={`Map for ${s.device ?? "device"}`}
-          loading="lazy"
-          className="mt-3 h-56 w-full rounded-lg border border-border/40"
-          src={`https://www.openstreetmap.org/export/embed.html?bbox=${(s.lon as number) - 0.05}%2C${(s.lat as number) - 0.05}%2C${(s.lon as number) + 0.05}%2C${(s.lat as number) + 0.05}&layer=mapnik&marker=${s.lat}%2C${s.lon}`}
-        />
-      ) : (
-        <div className="mt-3">
-          <iframe
-            title={`Map for ${s.device ?? "device"}`}
-            loading="lazy"
-            className="h-56 w-full rounded-lg border border-border/40 opacity-70"
-            src="https://www.openstreetmap.org/export/embed.html?bbox=-20%2C30%2C45%2C65&layer=mapnik"
+        <div className="relative mt-3">
+          <SessionMap
+            lat={s.lat as number}
+            lon={s.lon as number}
+            popupHtml={popupHtml}
+            className="h-56 w-full overflow-hidden rounded-lg border border-border/40"
           />
-          <p className="mt-1.5 text-xs text-muted-foreground">
-            Approximate — signed in from a local network, so there's no precise location to pin.
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            aria-label="Open larger map"
+            className="absolute right-2 top-2 z-[400] flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-background/90 text-foreground shadow-sm backdrop-blur hover:bg-background"
+          >
+            <Maximize2 className="h-4 w-4" />
+          </button>
+
+          <Dialog open={expanded} onOpenChange={setExpanded}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-base">
+                  <MapPin className="h-4 w-4" /> {location}
+                </DialogTitle>
+              </DialogHeader>
+              {expanded && (
+                <SessionMap
+                  lat={s.lat as number}
+                  lon={s.lon as number}
+                  popupHtml={popupHtml}
+                  zoom={12}
+                  openPopup
+                  scrollWheelZoom
+                  className="h-[60vh] w-full overflow-hidden rounded-lg border border-border/40"
+                />
+              )}
+              <p className="text-xs text-muted-foreground">
+                {device}{s.ip ? ` · ${ipv}: ${s.ip}` : ""}
+              </p>
+            </DialogContent>
+          </Dialog>
+        </div>
+      ) : (
+        <div className="mt-3 flex h-24 items-center justify-center rounded-lg border border-dashed border-border/50 bg-background/30 px-4 text-center">
+          <p className="text-xs text-muted-foreground">
+            No precise location — signed in from a local/private network{s.ip ? ` (${ipv}: ${s.ip})` : ""}.
           </p>
         </div>
       )}
     </div>
   );
+}
+
+/** Minimal HTML escaper for values placed into Leaflet popup markup. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 /** Devices & sessions list with per-device and bulk sign-out. */
@@ -741,12 +798,20 @@ function SessionsPanel({ endSession }: { endSession: () => void }) {
     try {
       await revokeSessionById(id);
       setSessions((xs) => (xs ?? []).filter((x) => x.id !== id));
+      toast.success("Device signed out");
     } catch (err) {
       if (err instanceof SessionExpiredError) { endSession(); return; }
       setError("Could not sign out that device.");
+      toast.error("Could not sign out that device.");
     } finally {
       setBusy(null);
     }
+  }
+
+  function askSignOutOne(id: string) {
+    toast("Sign out this device?", {
+      action: { label: "Sign out", onClick: () => signOutOne(id) },
+    });
   }
 
   async function signOutOthers() {
@@ -755,12 +820,20 @@ function SessionsPanel({ endSession }: { endSession: () => void }) {
     try {
       await revokeOtherSessions();
       setSessions((xs) => (xs ?? []).filter((x) => x.current));
+      toast.success("Signed out all other devices");
     } catch (err) {
       if (err instanceof SessionExpiredError) { endSession(); return; }
       setError("Could not sign out other devices.");
+      toast.error("Could not sign out other devices.");
     } finally {
       setBusy(null);
     }
+  }
+
+  function askSignOutOthers() {
+    toast("Sign out all other devices?", {
+      action: { label: "Sign out all", onClick: () => signOutOthers() },
+    });
   }
 
   const others = (sessions ?? []).filter((s) => !s.current).length;
@@ -779,14 +852,14 @@ function SessionsPanel({ endSession }: { endSession: () => void }) {
       ) : (
         <div className="space-y-3">
           {sessions.map((s) => (
-            <SessionRow key={s.id} s={s} busy={busy === s.id} onSignOut={() => signOutOne(s.id)} />
+            <SessionRow key={s.id} s={s} busy={busy === s.id} onSignOut={() => askSignOutOne(s.id)} />
           ))}
           {others > 0 && (
             <Button
               variant="outline"
               className="h-10 gap-2 rounded-xl text-destructive hover:text-destructive"
               disabled={busy === "others"}
-              onClick={signOutOthers}
+              onClick={askSignOutOthers}
             >
               {busy === "others" ? <Spinner className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
               Sign out all other devices
@@ -845,12 +918,20 @@ function PasskeysPanel({ endSession }: { endSession: () => void }) {
     try {
       await deletePasskey(id);
       setKeys((xs) => (xs ?? []).filter((k) => k.id !== id));
+      toast.success("Passkey removed");
     } catch (err) {
       if (err instanceof SessionExpiredError) { endSession(); return; }
       setError("Could not remove that passkey.");
+      toast.error("Could not remove that passkey.");
     } finally {
       setBusy(null);
     }
+  }
+
+  function askRemove(id: string) {
+    toast("Remove this passkey? You won't be able to sign in with it anymore.", {
+      action: { label: "Remove", onClick: () => remove(id) },
+    });
   }
 
   return (
