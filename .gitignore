@@ -22,9 +22,6 @@ landing-after-rebuild.jpeg
 .env.prod
 .env.local
 
-# Built mobile APK served by the web download page (too large for git)
-frontend/public/*.apk
-
 # AI agent tooling
 .agents/
 .codebuff/
