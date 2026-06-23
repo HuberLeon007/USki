@@ -37,11 +37,9 @@ class EmailMessage:
 
 # ── templates (pure) ─────────────────────────────────────────
 # Dark, table-based, email-client-safe shell mirroring supabase/templates/otp.html:
-# dark page (#0b0b0f), centered card (#15151c / #26262f), USki logo + text wordmark with
-# the purple "US" accent (#7c5cff). The logo is a publicly-hosted PNG; the text wordmark
-# stays as a graceful fallback if the image is blocked by the mail client.
+# dark page (#0b0b0f), centered card (#15151c / #26262f), USki text wordmark with the
+# purple "US" accent (#7c5cff). All styles inline; no external image so it always renders.
 _FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
-_LOGO_URL = "https://uski.huberleon.com/logo.png"
 
 
 def _shell(subtitle: str, body_html: str) -> str:
@@ -52,15 +50,10 @@ def _shell(subtitle: str, body_html: str) -> str:
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
         'style="max-width:480px;background:#15151c;border:1px solid #26262f;border-radius:16px;'
         'padding:36px 32px;">'
-        # Logo + wordmark side by side (logo left, "USki" right). The wordmark
-        # text stays as a graceful fallback if the image is blocked.
-        '<tr><td align="center" style="padding-bottom:18px;">'
-        f'<img src="{_LOGO_URL}" alt="" width="40" '
-        'style="display:inline-block;vertical-align:middle;width:40px;height:auto;border:0;'
-        'outline:none;text-decoration:none;border-radius:10px;margin-right:10px;" />'
-        '<span style="display:inline-block;vertical-align:middle;font-size:24px;font-weight:700;'
+        # Wordmark
+        '<tr><td align="center" style="padding-bottom:6px;font-size:24px;font-weight:700;'
         'letter-spacing:-0.02em;">'
-        '<span style="color:#7c5cff;">US</span><span style="color:#ffffff;">ki</span></span>'
+        '<span style="color:#7c5cff;">US</span><span style="color:#ffffff;">ki</span>'
         "</td></tr>"
         # Subtitle
         '<tr><td align="center" style="padding-bottom:24px;font-size:14px;color:#9b9ba7;">'
