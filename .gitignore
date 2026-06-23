@@ -20,6 +20,13 @@ landing-after-rebuild.jpeg
 # Built mobile APK served by the web download page (too large for git)
 frontend/public/*.apk
 
+# Mobile / Expo generated build & cache output (long Windows paths break git)
+mobile/.expo/
+mobile/.expo-shared/
+mobile/web-build/
+mobile/dist/
+**/.expo/
+
 # AI agent tooling
 .agents/
 .codebuff/

@@ -24,9 +24,27 @@ def test_device_parsing_known_agents():
     chrome_win = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0 Safari/537.36"
     assert device_from_user_agent(chrome_win) == "Chrome on Windows"
     iphone_safari = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Version/17.0 Mobile Safari/604.1"
-    assert device_from_user_agent(iphone_safari) == "Safari on iOS"
+    assert device_from_user_agent(iphone_safari) == "Safari on iOS (iPhone)"
     firefox_linux = "Mozilla/5.0 (X11; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0"
     assert device_from_user_agent(firefox_linux) == "Firefox on Linux"
+
+
+def test_device_parsing_includes_model_when_present():
+    ipad = "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) Version/17.0 Mobile Safari/604.1"
+    assert device_from_user_agent(ipad) == "Safari on iOS (iPad)"
+    pixel = (
+        "Mozilla/5.0 (Linux; Android 14; Pixel 7 Build/UQ1A.240105.004) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36"
+    )
+    assert device_from_user_agent(pixel) == "Chrome on Android (Pixel 7)"
+
+
+def test_device_parsing_desktop_has_no_model():
+    # Desktop UAs carry no friendly machine name -> stays "Browser on OS".
+    mac = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1 Safari/605.1"
+    assert device_from_user_agent(mac) == "Safari on macOS"
+    chrome_win = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0 Safari/537.36"
+    assert "(" not in device_from_user_agent(chrome_win)
 
 
 def test_device_parsing_empty():
