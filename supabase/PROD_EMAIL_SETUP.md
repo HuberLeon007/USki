@@ -41,7 +41,8 @@ branding stays consistent with the rest of USki.
 1. Open the Supabase Dashboard → your project → **Authentication** → **Emails** → **Templates**.
 2. Select the **Magic Link** template.
 3. Replace the **Message body (HTML)** with the full contents of `supabase/templates/otp.html`.
-4. Set the **Subject** to `Your USki sign-in code`.
+4. Set the **Subject** to `{{ .Token }} is your USki sign-in code` (shows the code in the inbox
+   preview). A plain alternative is `Your USki sign-in code`.
 5. Save.
 6. Repeat steps 2–5 for **Confirm signup**, **Reset Password**, and **Change Email Address**
    (subject `Your USki verification code` for the email-change one).

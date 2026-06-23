@@ -48,19 +48,19 @@ enable_confirmations = true
 # Code-only emails: every auth mail shows ONLY the 6-digit {{ .Token }},
 # no magic link, no "Confirm your email" copy.
 [auth.email.template.confirmation]
-subject = "Your USki sign-in code"
+subject = "{{ .Token }} is your USki sign-in code"
 content_path = "./supabase/templates/otp.html"
 
 [auth.email.template.magic_link]
-subject = "Your USki sign-in code"
+subject = "{{ .Token }} is your USki sign-in code"
 content_path = "./supabase/templates/otp.html"
 
 [auth.email.template.recovery]
-subject = "Your USki sign-in code"
+subject = "{{ .Token }} is your USki sign-in code"
 content_path = "./supabase/templates/otp.html"
 
 [auth.email.template.email_change]
-subject = "Your USki verification code"
+subject = "{{ .Token }} is your USki verification code"
 content_path = "./supabase/templates/otp.html"
 
 [auth.sms]

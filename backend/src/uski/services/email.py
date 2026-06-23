@@ -52,15 +52,15 @@ def _shell(subtitle: str, body_html: str) -> str:
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
         'style="max-width:480px;background:#15151c;border:1px solid #26262f;border-radius:16px;'
         'padding:36px 32px;">'
-        # Logo
-        '<tr><td align="center" style="padding-bottom:12px;">'
-        f'<img src="{_LOGO_URL}" alt="USki" width="56" '
-        'style="display:block;width:56px;height:auto;border:0;outline:none;text-decoration:none;border-radius:12px;" />'
-        "</td></tr>"
-        # Wordmark (fallback / product name)
-        '<tr><td align="center" style="padding-bottom:6px;font-size:24px;font-weight:700;'
+        # Logo + wordmark side by side (logo left, "USki" right). The wordmark
+        # text stays as a graceful fallback if the image is blocked.
+        '<tr><td align="center" style="padding-bottom:18px;">'
+        f'<img src="{_LOGO_URL}" alt="" width="40" '
+        'style="display:inline-block;vertical-align:middle;width:40px;height:auto;border:0;'
+        'outline:none;text-decoration:none;border-radius:10px;margin-right:10px;" />'
+        '<span style="display:inline-block;vertical-align:middle;font-size:24px;font-weight:700;'
         'letter-spacing:-0.02em;">'
-        '<span style="color:#7c5cff;">US</span><span style="color:#ffffff;">ki</span>'
+        '<span style="color:#7c5cff;">US</span><span style="color:#ffffff;">ki</span></span>'
         "</td></tr>"
         # Subtitle
         '<tr><td align="center" style="padding-bottom:24px;font-size:14px;color:#9b9ba7;">'
@@ -83,7 +83,7 @@ def welcome_email(to: str, name: str | None) -> EmailMessage:
         "whenever you're stuck. We're glad you're here.</p>"
     )
     return EmailMessage(
-        to=to, subject="Welcome to USki", html=_shell("Welcome aboard", body), kind="welcome"
+        to=to, subject="Welcome to USki 🎉", html=_shell("Welcome aboard", body), kind="welcome"
     )
 
 
@@ -112,7 +112,7 @@ def login_alert_email(to: str, device: str, location: str, when: datetime) -> Em
     )
     return EmailMessage(
         to=to,
-        subject="New sign-in to your USki account",
+        subject=f"New USki sign-in from {device}",
         html=_shell("New sign-in", body),
         kind="login_alert",
     )
