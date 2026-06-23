@@ -10,9 +10,9 @@ sequenceDiagram
   DB-->>BE: FSRS-State je Karte
   BE->>BE: fällige Karten (due_at <= jetzt)
   BE-->>FE: fällige Karten
-  U->>FE: bewerten: again / hard / good / easy
+  U->>FE: Karte bewerten: again / hard / good / easy
   FE->>BE: POST /review/{cardId} {rating}
-  BE->>FS: review(state, rating, now)
-  FS-->>BE: neuer State + nächstes Intervall
-  BE->>DB: upsert(schedule, due_at)
-  BE-->>FE: nächste Fälligkeit
+  BE->>FS: alter Lernstand + Bewertung -> berechnen
+  FS-->>BE: neuer Lernstand + nächster Termin
+  BE->>DB: Lernstand speichern (anlegen oder aktualisieren)
+  BE-->>FE: nächster Fälligkeitstermin

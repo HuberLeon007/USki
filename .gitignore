@@ -28,3 +28,6 @@ landing-after-rebuild.jpeg
 
 # OneDrive multi-machine duplicate conflict copies
 *-HuberLeonSurfaceStudio.*
+
+# Oversized universal APK (>100MB) - only the served uski.apk is tracked
+frontend/public/uski-latest.apk
