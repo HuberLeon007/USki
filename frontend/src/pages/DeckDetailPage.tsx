@@ -104,6 +104,11 @@ export default function DeckDetailPage() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkLabel, setBulkLabel] = useState("");
   const [bulkColor, setBulkColor] = useState("");
+  // Card deletion always asks for confirmation first; these track the pending
+  // request and the in-flight state so buttons can show feedback.
+  const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; notes: number } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [grouping, setGrouping] = useState(false);
 
   function loadStats() { reviewStats(deckId).then(setStats).catch(() => {}); }
 
@@ -257,11 +262,22 @@ export default function DeckDetailPage() {
     reorderCards(deckId, newCards.map((c) => c.id)).catch(() => {});
   }
 
-  async function removeNote(ids: string[]) {
-    await Promise.all(ids.map((id) => deleteCard(deckId, id)));
-    setCards((cs) => cs.filter((c) => !ids.includes(c.id)));
-    setSelected((s) => { const n = new Set(s); ids.forEach((id) => n.delete(id)); return n; });
-    loadStats();
+  async function runConfirmedDelete() {
+    if (!pendingDelete) return;
+    const { ids, notes } = pendingDelete;
+    setDeleting(true);
+    try {
+      await Promise.all(ids.map((id) => deleteCard(deckId, id)));
+      setCards((cs) => cs.filter((c) => !ids.includes(c.id)));
+      setSelected((s) => { const n = new Set(s); ids.forEach((id) => n.delete(id)); return n; });
+      loadStats();
+      toast.success(notes > 1 ? `${notes} cards deleted` : "Card deleted");
+      setPendingDelete(null);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not delete. Please try again.");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   function toggleSelect(id: string) {
@@ -272,20 +288,26 @@ export default function DeckDetailPage() {
     const label = bulkLabel.trim() || null;
     const color = bulkColor || null;
     const ids = noteGroups.filter((g) => selected.has(g.rep.id)).flatMap((g) => g.ids);
-    await Promise.all(ids.map((id) => updateCard(deckId, id, { group_label: label, group_color: color })));
-    setCards(await listCards(deckId));
-    setSelected(new Set()); setBulkOpen(false); setBulkLabel(""); setBulkColor("");
+    if (!ids.length) return;
+    setGrouping(true);
+    try {
+      await Promise.all(ids.map((id) => updateCard(deckId, id, { group_label: label, group_color: color })));
+      setCards(await listCards(deckId));
+      setSelected(new Set()); setBulkOpen(false); setBulkLabel(""); setBulkColor("");
+      toast.success(label ? `Grouped into “${label}”` : "Group removed");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not group the cards.");
+    } finally {
+      setGrouping(false);
+    }
   }
 
   const selectedIds = () => noteGroups.filter((g) => selected.has(g.rep.id)).flatMap((g) => g.ids);
 
-  async function bulkDelete() {
+  function bulkDelete() {
     const ids = selectedIds();
     if (!ids.length) return;
-    await Promise.all(ids.map((id) => deleteCard(deckId, id)));
-    setCards((cs) => cs.filter((c) => !ids.includes(c.id)));
-    setSelected(new Set());
-    loadStats();
+    setPendingDelete({ ids, notes: selected.size });
   }
 
   async function bulkReset() {
@@ -457,8 +479,10 @@ export default function DeckDetailPage() {
                         />
                       ))}
                     </div>
-                    <Button size="sm" className="h-8 rounded-lg" onClick={applyBulkGroup}>Apply</Button>
-                    <Button size="sm" variant="ghost" className="h-8 rounded-lg" onClick={() => setBulkOpen(false)}>Cancel</Button>
+                    <Button size="sm" className="h-8 rounded-lg" onClick={applyBulkGroup} disabled={grouping}>
+                      {grouping ? <Loader2 className="h-4 w-4 animate-spin" /> : "Apply"}
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-8 rounded-lg" onClick={() => setBulkOpen(false)} disabled={grouping}>Cancel</Button>
                   </div>
                 ) : (
                   <>
@@ -571,7 +595,7 @@ export default function DeckDetailPage() {
                             </span>
                           )}
                           <button onClick={() => openEdit(rep)} aria-label="Edit card" className="text-muted-foreground hover:text-foreground"><Pencil className="h-4 w-4" /></button>
-                          <button onClick={() => removeNote(ids)} aria-label="Delete card" className="text-destructive"><Trash2 className="h-4 w-4" /></button>
+                          <button onClick={() => setPendingDelete({ ids, notes: 1 })} aria-label="Delete card" className="text-destructive"><Trash2 className="h-4 w-4" /></button>
                         </div>
                       </motion.div>
                     );
@@ -585,6 +609,29 @@ export default function DeckDetailPage() {
 
       <ShareDialog open={shareOpen} onOpenChange={setShareOpen} deckId={deckId} />
       <AssistantBubble deckId={deckId} />
+
+      {/* Confirm card deletion (single or bulk) — deletes are never silent. */}
+      <Dialog open={pendingDelete !== null} onOpenChange={(o) => { if (!o && !deleting) setPendingDelete(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{pendingDelete && pendingDelete.notes > 1 ? `Delete ${pendingDelete.notes} cards?` : "Delete this card?"}</DialogTitle>
+            <DialogDescription>
+              This permanently removes {pendingDelete && pendingDelete.notes > 1 ? "the selected cards" : "the card"} and their learning progress. This can't be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" className="h-10 rounded-lg" onClick={() => setPendingDelete(null)} disabled={deleting}>Cancel</Button>
+            <Button
+              className="h-10 gap-1.5 rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={runConfirmedDelete}
+              disabled={deleting}
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Delete
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Custom study: pick the set before starting. */}
       <Dialog open={customOpen} onOpenChange={setCustomOpen}>
