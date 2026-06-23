@@ -36,42 +36,79 @@ class EmailMessage:
 
 
 # ── templates (pure) ─────────────────────────────────────────
-def _shell(title: str, body_html: str) -> str:
+# Dark, table-based, email-client-safe shell mirroring supabase/templates/otp.html:
+# dark page (#0b0b0f), centered card (#15151c / #26262f), USki text wordmark with the
+# purple "US" accent (#7c5cff). All styles inline; no external image so it always renders.
+_FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+
+
+def _shell(subtitle: str, body_html: str) -> str:
     return (
-        '<div style="font-family:system-ui,Segoe UI,Roboto,sans-serif;max-width:520px;'
-        'margin:0 auto;padding:24px;color:#0f172a">'
-        '<h1 style="font-size:20px;margin:0 0 4px">USki</h1>'
-        f'<h2 style="font-size:16px;margin:16px 0 8px">{title}</h2>'
-        f'{body_html}'
-        '<p style="margin-top:24px;font-size:12px;color:#64748b">'
-        "You're receiving this because you have a USki account.</p>"
-        "</div>"
+        f'<!doctype html><html lang="en"><body style="margin:0;background:#0b0b0f;font-family:{_FONT};">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="background:#0b0b0f;padding:40px 0;"><tr><td align="center">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="max-width:480px;background:#15151c;border:1px solid #26262f;border-radius:16px;'
+        'padding:36px 32px;">'
+        # Wordmark
+        '<tr><td align="center" style="padding-bottom:6px;font-size:24px;font-weight:700;'
+        'letter-spacing:-0.02em;">'
+        '<span style="color:#7c5cff;">US</span><span style="color:#ffffff;">ki</span>'
+        "</td></tr>"
+        # Subtitle
+        '<tr><td align="center" style="padding-bottom:24px;font-size:14px;color:#9b9ba7;">'
+        f"{subtitle}</td></tr>"
+        # Body
+        f'<tr><td style="font-size:14px;line-height:1.6;color:#c7c7d1;">{body_html}</td></tr>'
+        # Footer
+        '<tr><td align="center" style="padding-top:28px;font-size:12px;line-height:1.6;color:#6b6b78;">'
+        "You're receiving this because you have a USki account."
+        "</td></tr>"
+        "</table></td></tr></table></body></html>"
     )
 
 
 def welcome_email(to: str, name: str | None) -> EmailMessage:
     who = name or "there"
     body = (
-        f"<p>Hi {who}, welcome to USki!</p>"
-        "<p>Create your first deck, study with FSRS, and ask the AI assistant whenever "
-        "you're stuck. We're glad you're here.</p>"
+        f'<p style="margin:0 0 12px;color:#ffffff;font-size:16px;font-weight:600;">Hi {who}, welcome to USki!</p>'
+        '<p style="margin:0;">Create your first deck, study with FSRS, and ask the AI assistant '
+        "whenever you're stuck. We're glad you're here.</p>"
     )
-    return EmailMessage(to=to, subject="Welcome to USki", html=_shell("Welcome aboard", body), kind="welcome")
+    return EmailMessage(
+        to=to, subject="Welcome to USki", html=_shell("Welcome aboard", body), kind="welcome"
+    )
+
+
+def _detail_row(label: str, value: str) -> str:
+    return (
+        '<tr>'
+        f'<td style="padding:8px 16px 8px 0;color:#6b6b78;font-size:13px;white-space:nowrap;">{label}</td>'
+        f'<td style="padding:8px 0;color:#ffffff;font-size:13px;font-weight:600;">{value}</td>'
+        "</tr>"
+    )
 
 
 def login_alert_email(to: str, device: str, location: str, when: datetime) -> EmailMessage:
     ts = when.strftime("%Y-%m-%d %H:%M UTC")
     body = (
-        "<p>A new sign-in to your USki account was just recorded:</p>"
-        '<table style="font-size:14px;border-collapse:collapse">'
-        f'<tr><td style="padding:2px 12px 2px 0;color:#64748b">Device</td><td>{device}</td></tr>'
-        f'<tr><td style="padding:2px 12px 2px 0;color:#64748b">Location</td><td>{location}</td></tr>'
-        f'<tr><td style="padding:2px 12px 2px 0;color:#64748b">Time</td><td>{ts}</td></tr>'
+        '<p style="margin:0 0 16px;">A new sign-in to your USki account was just recorded:</p>'
+        '<table role="presentation" cellpadding="0" cellspacing="0" '
+        'style="width:100%;background:#0b0b0f;border:1px solid #2e2e3a;border-radius:12px;'
+        'padding:8px 16px;border-collapse:separate;">'
+        f"{_detail_row('Device', device)}"
+        f"{_detail_row('Location', location)}"
+        f"{_detail_row('Time', ts)}"
         "</table>"
-        "<p style=\"margin-top:12px\">If this was you, no action is needed. If not, open "
-        "Settings &rarr; Security and sign out that device.</p>"
+        '<p style="margin:16px 0 0;color:#9b9ba7;">If this was you, no action is needed. '
+        "If not, open Settings &rarr; Security and sign out that device.</p>"
     )
-    return EmailMessage(to=to, subject="New sign-in to your USki account", html=_shell("New sign-in", body), kind="login_alert")
+    return EmailMessage(
+        to=to,
+        subject="New sign-in to your USki account",
+        html=_shell("New sign-in", body),
+        kind="login_alert",
+    )
 
 
 # ── adapters ─────────────────────────────────────────────────

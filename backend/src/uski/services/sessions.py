@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import ipaddress
+import re
 from dataclasses import dataclass
 
 import requests
@@ -35,10 +36,15 @@ def session_key_for(refresh_token: str) -> str:
 
 
 def device_from_user_agent(ua: str | None) -> str:
-    """Human-friendly "Browser on OS" label parsed from a User-Agent string.
+    """Human-friendly device label parsed from a User-Agent string.
 
-    Deliberately tiny and dependency-free: it recognises the common browsers and
-    platforms and degrades to "Unknown device" rather than guessing.
+    Returns the most specific label the UA allows:
+    - a named device model when present ("iPhone", "iPad", or an Android model),
+      formatted as "Browser on OS (Model)";
+    - otherwise "Browser on OS";
+    - degrading to "Unknown device" when there is no UA at all.
+
+    Deliberately tiny and dependency-free so it stays exhaustively testable.
     """
     if not ua:
         return "Unknown device"
@@ -70,7 +76,32 @@ def device_from_user_agent(ua: str | None) -> str:
     else:
         os_name = "Unknown OS"
 
-    return f"{browser} on {os_name}"
+    model = _device_model(ua)
+    return f"{browser} on {os_name} ({model})" if model else f"{browser} on {os_name}"
+
+
+def _device_model(ua: str) -> str | None:
+    """Best-effort device model from a User-Agent, or None when not exposed.
+
+    Desktop UAs (Windows/macOS/Linux) carry no friendly machine name, so this
+    returns None and the caller falls back to "Browser on OS".
+    """
+    s = ua.lower()
+    if "ipad" in s:
+        return "iPad"
+    if "iphone" in s:
+        return "iPhone"
+    if "android" in s:
+        # Android UAs look like: "...; <Model> Build/..." — grab the segment
+        # before "Build/" on the model-carrying clause.
+        m = re.search(r";\s*([^;]+?)\s+build/", ua, flags=re.IGNORECASE)
+        if m:
+            model = m.group(1).strip()
+            # Skip generic/non-model tokens.
+            if model and model.lower() not in {"wv", "k"}:
+                return model
+        return None
+    return None
 
 
 def is_private_ip(ip: str | None) -> bool:

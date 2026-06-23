@@ -29,5 +29,12 @@ landing-after-rebuild.jpeg
 # OneDrive multi-machine duplicate conflict copies
 *-HuberLeonSurfaceStudio.*
 
+# Mobile / Expo generated build & cache output (long Windows paths break git)
+mobile/.expo/
+mobile/.expo-shared/
+mobile/web-build/
+mobile/dist/
+**/.expo/
+
 # Oversized universal APK (>100MB) - only the served uski.apk is tracked
 frontend/public/uski-latest.apk

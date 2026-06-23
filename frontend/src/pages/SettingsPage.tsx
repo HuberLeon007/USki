@@ -697,13 +697,21 @@ function SessionRow({ s, busy, onSignOut }: { s: SessionInfo; busy: boolean; onS
         <iframe
           title={`Map for ${s.device ?? "device"}`}
           loading="lazy"
-          className="mt-3 h-40 w-full rounded-lg border border-border/40"
+          className="mt-3 h-56 w-full rounded-lg border border-border/40"
           src={`https://www.openstreetmap.org/export/embed.html?bbox=${(s.lon as number) - 0.05}%2C${(s.lat as number) - 0.05}%2C${(s.lon as number) + 0.05}%2C${(s.lat as number) + 0.05}&layer=mapnik&marker=${s.lat}%2C${s.lon}`}
         />
       ) : (
-        <p className="mt-3 rounded-lg border border-dashed border-border/40 bg-background/30 px-3 py-2 text-xs text-muted-foreground">
-          A location map appears for sign-ins from public networks. This one came from a local network, so there's nothing to pin.
-        </p>
+        <div className="mt-3">
+          <iframe
+            title={`Map for ${s.device ?? "device"}`}
+            loading="lazy"
+            className="h-56 w-full rounded-lg border border-border/40 opacity-70"
+            src="https://www.openstreetmap.org/export/embed.html?bbox=-20%2C30%2C45%2C65&layer=mapnik"
+          />
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            Approximate — signed in from a local network, so there's no precise location to pin.
+          </p>
+        </div>
       )}
     </div>
   );

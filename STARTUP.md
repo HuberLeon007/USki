@@ -139,3 +139,20 @@ supabase stop
 
 **Datenbank leer nach Neustart**
 - Migrations neu anwenden: `supabase migration up`
+
+**Git: `cannot stat '...mobile/.expo/...': Filename too long` beim Commit/Merge (Windows)**
+- Expo legt unter `mobile/.expo/` tief verschachtelte Cache-Dateien an, deren Pfade die Windows-`MAX_PATH`-Grenze sprengen. Diese Artefakte gehören nicht ins Git.
+- `mobile/.expo/` ist in `.gitignore` ausgeschlossen. Zusätzlich einmalig pro Klon langes-Pfad-Handling aktivieren (nur für dieses Repo, kein globaler Eingriff):
+
+```bash
+git config core.longpaths true
+```
+
+- Falls doch schon `.expo`-Dateien getrackt sind: `git rm -r --cached mobile/.expo` (Working-Tree bleibt erhalten), dann committen.
+
+**Prod-Mail zeigt einen Anmelde-Link statt des 6-stelligen Codes**
+- `supabase/config.toml` gilt nur für die lokale Supabase-CLI, nicht für das gehostete Supabase-Cloud-Projekt. In der Cloud werden die Mail-Templates im Dashboard gesetzt.
+- Anleitung: `supabase/PROD_EMAIL_SETUP.md`.
+
+**Mehr Log-Details in Prod sehen**
+- Das Log-Level steuert `BACKEND_LOG_LEVEL` (Default `INFO`), unabhängig von `APP_MODE`. Für maximale Ausgabe in Prod `BACKEND_LOG_LEVEL=DEBUG` (oder `TRACE`) in der Umgebung/`.env` setzen.
