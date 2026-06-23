@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Loader2, Copy, Trash2, Check } from "lucide-react";
+import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -10,6 +11,33 @@ import {
   createInvite, grantShare, listShares, revokeShare,
   type Permission, type Share,
 } from "@/lib/api";
+
+/** Copy text to the clipboard, with a fallback for non-secure contexts /
+ *  browsers where the async Clipboard API is unavailable. Returns success. */
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch { /* fall through to legacy path */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.top = "-1000px";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
 
 interface Props {
   open: boolean;
@@ -23,7 +51,8 @@ export function ShareDialog({ open, onOpenChange, deckId }: Props) {
   const [permission, setPermission] = useState<Permission>("read");
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -32,7 +61,8 @@ export function ShareDialog({ open, onOpenChange, deckId }: Props) {
       listShares(deckId).then(setShares).catch(() => setShares([]));
       setInviteLink(null);
       setInviteCode(null);
-      setCopied(false);
+      setCopiedCode(false);
+      setCopiedLink(false);
       setError(null);
     }
   }, [open, deckId]);
@@ -64,26 +94,52 @@ export function ShareDialog({ open, onOpenChange, deckId }: Props) {
 
   async function makeLink() {
     setBusy(true);
+    setError(null);
     try {
       const inv = await createInvite(deckId, permission);
       // A full, shareable URL — opening it (signed in) redeems the invite once.
-      setInviteLink(`${window.location.origin}/dashboard?invite=${inv.code}`);
+      const link = `${window.location.origin}/dashboard?invite=${inv.code}`;
+      setInviteLink(link);
       setInviteCode(inv.code);
-      setCopied(false);
+      setCopiedCode(false);
+      setCopiedLink(false);
+      // Convenience: generating also copies the link straight away.
+      const ok = await copyToClipboard(link);
+      if (ok) {
+        setCopiedLink(true);
+        setTimeout(() => setCopiedLink(false), 1800);
+        toast.success("Invite link created and copied");
+      } else {
+        toast.success("Invite link created");
+      }
     } catch {
       setError("Could not create an invite link.");
+      toast.error("Could not create an invite link.");
     } finally {
       setBusy(false);
     }
   }
 
+  async function copyCode() {
+    if (!inviteCode) return;
+    if (await copyToClipboard(inviteCode)) {
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 1800);
+      toast.success("Code copied to clipboard");
+    } else {
+      toast.error("Couldn't copy — select the code and copy manually");
+    }
+  }
+
   async function copyLink() {
     if (!inviteLink) return;
-    try {
-      await navigator.clipboard?.writeText(inviteLink);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
-    } catch { /* clipboard blocked */ }
+    if (await copyToClipboard(inviteLink)) {
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 1800);
+      toast.success("Link copied to clipboard");
+    } else {
+      toast.error("Couldn't copy — select the link and copy manually");
+    }
   }
 
   return (
@@ -141,9 +197,9 @@ export function ShareDialog({ open, onOpenChange, deckId }: Props) {
                 size="sm"
                 variant="secondary"
                 className="h-8 shrink-0 gap-1.5 rounded-lg"
-                onClick={() => { navigator.clipboard?.writeText(inviteCode).catch(() => {}); }}
+                onClick={copyCode}
               >
-                <Copy className="h-3.5 w-3.5" /> Copy
+                {copiedCode ? <><Check className="h-3.5 w-3.5" /> Copied</> : <><Copy className="h-3.5 w-3.5" /> Copy code</>}
               </Button>
             </div>
           )}
@@ -157,7 +213,7 @@ export function ShareDialog({ open, onOpenChange, deckId }: Props) {
                 aria-label="Invite link"
               />
               <Button type="button" size="sm" variant="secondary" className="h-8 shrink-0 gap-1.5 rounded-lg" onClick={copyLink}>
-                {copied ? <><Check className="h-3.5 w-3.5" /> Copied</> : <><Copy className="h-3.5 w-3.5" /> Copy</>}
+                {copiedLink ? <><Check className="h-3.5 w-3.5" /> Copied</> : <><Copy className="h-3.5 w-3.5" /> Copy link</>}
               </Button>
             </div>
           )}
